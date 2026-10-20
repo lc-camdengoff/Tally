@@ -7,17 +7,26 @@ moments. Export the markers as a Resolve EDL, CSV or text list.
 The whole app is `index.html`: no build step. Everything is saved in the
 browser's `localStorage` on the device.
 
-## Files `index.html` expects next to it
+## Offline
 
-These aren't in the repo yet. The app runs without them but loses what each one
-adds:
+`sw.js` keeps a copy of everything on the phone the first time Tally is opened
+with a connection, so after that it opens and camera sync works with no signal.
+Settings → Offline says when that copy is ready. Adding Tally to the Home Screen
+(Share → Add to Home Screen) makes it open like an app.
 
-| Path | Without it |
+The page is fetched fresh whenever there's a connection, so a deploy reaches
+people the next time they open it. The other files are only re-downloaded when
+`VERSION` in `sw.js` changes: bump it whenever you add, remove or replace one of
+the files in its `PRECACHE` list.
+
+| Path | What it is |
 | --- | --- |
-| `manifest.webmanifest`, `icons/icon-180.png`, `icons/icon-192.png` | No proper Home Screen icon or app name |
-| `fonts/archivo-*.woff2`, `fonts/martian-mono-*.woff2` | Falls back to system fonts |
-| `sw.js` | No offline copy. Settings will keep saying "Saving a copy to this phone" |
-| `vendor/tesseract/`, `vendor/tesseract-core/`, `vendor/lang/eng.traineddata.gz` | Camera sync loads its text reader from the jsDelivr CDN, so it needs a connection |
+| `vendor/tesseract/`, `vendor/tesseract-core/` | tesseract.js 5.1.1 and its core, the text reader camera sync uses (Apache 2.0) |
+| `vendor/lang/eng.traineddata.gz` | its English model, `@tesseract.js-data/eng` 1.0.0, `4.0.0_best_int` |
+| `fonts/` | Archivo and Martian Mono from Fontsource (SIL Open Font License) |
+| `icons/`, `manifest.webmanifest` | Home Screen icon and name |
+
+If camera sync can't load the local text reader, it falls back to jsDelivr.
 
 Camera and microphone access need the page served over HTTPS (or `localhost`).
 
