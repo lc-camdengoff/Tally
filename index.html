@@ -1,0 +1,1799 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tally">
+<meta name="theme-color" content="#14191f">
+<title>Tally — timecode markers</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<style>
+/* Fonts ship with the app so it looks the same with no connection. */
+@font-face{font-family:"Archivo";font-style:normal;font-display:swap;font-weight:100 900;font-stretch:62% 125%;src:url(fonts/archivo-latin-wdth-normal.woff2) format("woff2-variations"),url(fonts/archivo-latin-wdth-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Archivo";font-style:normal;font-display:swap;font-weight:100 900;font-stretch:62% 125%;src:url(fonts/archivo-latin-ext-wdth-normal.woff2) format("woff2-variations"),url(fonts/archivo-latin-ext-wdth-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Martian Mono";font-style:normal;font-display:swap;font-weight:100 800;font-stretch:75% 112.5%;src:url(fonts/martian-mono-latin-wdth-normal.woff2) format("woff2-variations"),url(fonts/martian-mono-latin-wdth-normal.woff2) format("woff2")}
+</style>
+<style>
+:root{
+  --font-ui:"Archivo", system-ui, -apple-system, sans-serif;
+  --font-tc:"Martian Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --tally:#ff3b30; --ok:#34c77b; --warn:#f5a524;
+  --r-lg:18px; --r-md:12px; --r-sm:8px;
+  --safe-t:env(safe-area-inset-top); --safe-b:env(safe-area-inset-bottom);
+}
+[data-theme="dark"]{
+  --bg:#14191f; --panel:#1c232b; --panel-2:#252e38; --line:#33404c;
+  --text:#e9eef3; --muted:#8b98a6; --dim:#56636f; --tick:#2b3540; --shadow:0 18px 50px rgba(0,0,0,.45);
+  color-scheme:dark;
+}
+[data-theme="light"]{
+  --bg:#e4e8ec; --panel:#f6f8fa; --panel-2:#ffffff; --line:#c7cfd7;
+  --text:#11171d; --muted:#56626e; --dim:#9aa6b1; --tick:#cfd6dd; --shadow:0 18px 50px rgba(20,30,40,.18);
+  color-scheme:light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:16px;line-height:1.4}
+body{min-height:100dvh;padding-top:var(--safe-t);padding-bottom:var(--safe-b);font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+input,textarea,select{-webkit-user-select:text;user-select:text}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.01em}
+.hidden{display:none!important}
+.app{max-width:1100px;margin:0 auto;padding:0 16px 120px}
+
+/* Top bar */
+.bar{display:flex;align-items:center;gap:8px;height:56px}
+.bar .grow{flex:1;min-width:0}
+.brand{font-weight:800;font-size:22px;font-stretch:112%;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+.brand i{width:12px;height:12px;border-radius:50%;background:var(--tally);box-shadow:0 0 0 4px color-mix(in srgb,var(--tally) 22%,transparent)}
+.icon-btn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--text)}
+.icon-btn:active{background:var(--panel-2)}
+.icon-btn svg{width:22px;height:22px}
+.title-btn{font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:left;padding:6px 4px}
+
+/* Sync pill */
+.pill{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px 0 12px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font-size:14px;font-weight:600;white-space:nowrap}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.pill.ok .dot{background:var(--ok)} .pill.warn .dot{background:var(--warn)}
+.pill .age{color:var(--muted);font-weight:500}
+
+/* Buttons */
+.btn{height:48px;padding:0 20px;border-radius:var(--r-md);background:var(--panel-2);border:1px solid var(--line);font-weight:650;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--text);color:var(--bg);border-color:transparent}
+.btn.danger{color:var(--tally)}
+.btn:disabled{opacity:.4;pointer-events:none}
+.btn svg{width:18px;height:18px}
+.btn.block{width:100%}
+/* Step emphasis in the sync sheet: the button to press next is big and filled, the other steps back. */
+.btn.go{height:58px;padding:0 12px;white-space:nowrap;font-size:17px;font-weight:800;background:var(--ok);color:#06140c;border-color:transparent;box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 24%,transparent);transition:background .2s, box-shadow .2s, opacity .2s}
+.btn.go:disabled{opacity:.55}
+.btn.quiet{height:58px;padding:0 12px;white-space:nowrap;background:transparent;color:var(--muted);font-weight:600;border-color:var(--line);transition:opacity .2s}
+.btn.go.ready{animation:ready 1.2s ease-out 2}
+@keyframes ready{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent)}100%{box-shadow:0 0 0 14px transparent}}
+@media (prefers-reduced-motion:reduce){.btn.go.ready{animation:none}}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>.btn{flex:1}
+
+/* Home */
+.clock-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px 18px 16px;margin:4px 0 26px}
+.clock-card .tc-mid{white-space:nowrap;overflow:hidden;font-family:var(--font-tc);font-weight:500;font-stretch:80%;font-size:clamp(34px,11vw,64px);letter-spacing:-.02em;line-height:1.05;margin:4px 0 14px}
+.clock-card .row{align-items:center;justify-content:space-between}
+.list-head{display:flex;align-items:center;justify-content:space-between;margin:0 2px 10px}
+.list-head h2{font-size:20px;font-stretch:110%}
+.text-btn{font-weight:650;color:var(--muted);padding:8px 4px}
+.sessions{display:flex;flex-direction:column;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+.swipe{position:relative;overflow:hidden;background:var(--panel)}
+.acts{position:absolute;top:0;right:0;bottom:0;display:flex;opacity:0;transition:opacity .15s}
+.swipe.open .acts{opacity:1}
+.act{width:88px;background:var(--panel-2);color:var(--text);font-weight:750;font-size:15px;border-left:1px solid var(--line)}
+.act.del{background:var(--tally);color:#fff;border-left:0}
+.frow .ficon{width:40px;height:40px;border-radius:var(--r-sm);background:var(--panel-2);display:grid;place-items:center;flex:none;color:var(--muted)}
+.frow .ficon svg{width:22px;height:22px}
+.frow .chev{width:16px;height:16px;color:var(--dim);flex:none}
+.sessions.folders{margin-bottom:18px}
+.sub-head{font-size:14px;color:var(--muted);font-weight:650;margin:0 4px 8px}
+.list-acts{display:flex;gap:14px}
+.folder-title{font-size:20px;font-stretch:108%}
+.lays{display:flex;flex-direction:column;gap:8px}
+.lrow{display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-md)}
+.lpick{flex:1;min-width:0;text-align:left;padding:12px 14px;display:flex;flex-direction:column;gap:3px}
+.lpick .lname{font-weight:700;font-size:16px}
+.lpick .lsub{color:var(--muted);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lpick .swatches{display:flex;gap:3px;margin-top:4px}
+.lpick .swatches i{width:14px;height:6px;border-radius:2px}
+.lrow .ldel{width:40px;height:40px;margin-right:6px;color:var(--muted)}
+.lrow .ldel svg{width:16px;height:16px}
+.mlist{display:flex;flex-direction:column;gap:8px}
+.mrow{display:flex;align-items:center;gap:12px;padding:14px;border-radius:var(--r-md);background:var(--panel-2);border:1px solid var(--line);text-align:left;font-weight:650}
+.mrow svg{width:20px;height:20px;color:var(--muted);flex:none}
+.mrow span{flex:1}
+.mrow small{color:var(--muted);font-weight:500}
+.mrow[aria-current="true"]{border-color:var(--text)}
+.mrow.new{background:transparent;border-style:dashed}
+.srow{position:relative;display:flex;align-items:center;gap:14px;background:var(--panel);padding:14px 16px;text-align:left;width:100%;transition:transform .22s cubic-bezier(.2,.8,.2,1);touch-action:pan-y}
+.srow.dragging{transition:none}
+@media (prefers-reduced-motion:reduce){.srow{transition:none}}
+.srow:active{background:var(--panel-2)}
+.srow .check{width:24px;height:24px;border-radius:50%;border:2px solid var(--dim);flex:none;display:grid;place-items:center}
+.srow.sel .check{background:var(--text);border-color:var(--text)}
+.srow.sel .check::after{content:"";width:10px;height:6px;border:2.5px solid var(--bg);border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.srow .main{flex:1;min-width:0}
+.srow .name{font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow .sub{color:var(--muted);font-size:14px;margin-top:2px;display:flex;gap:12px;flex-wrap:wrap}
+.srow .swatches{display:flex;gap:3px;margin-top:8px}
+.srow .swatches i{width:14px;height:6px;border-radius:2px}
+.srow .count{font-family:var(--font-tc);font-stretch:80%;font-size:20px;font-weight:500;min-width:2ch;text-align:right}
+.srow .live{color:var(--tally);font-weight:700;font-size:13px}
+.empty{background:var(--panel);border:1px dashed var(--line);border-radius:var(--r-lg);padding:28px 20px;color:var(--muted);text-align:center}
+.empty strong{display:block;color:var(--text);font-size:17px;margin-bottom:4px}
+.fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + var(--safe-b));height:56px;padding:0 26px;border-radius:999px;background:var(--text);color:var(--bg);font-weight:750;font-size:17px;white-space:nowrap;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);z-index:20}
+.fab svg{width:20px;height:20px}
+.selbar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + var(--safe-b));background:var(--panel);border-top:1px solid var(--line);display:flex;gap:10px;z-index:20}
+.selbar .btn{flex:1}
+
+/* Recorder */
+.rec-layout{display:grid;gap:18px}
+.rec-layout>*{min-width:0}
+@media (min-width:900px){.rec-layout{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:start}.rec-side{position:sticky;top:12px}}
+.monitor{border-radius:var(--r-lg);padding:14px 14px 12px;background:var(--panel);border:1px solid var(--line);transition:border-color .2s, box-shadow .2s}
+.monitor.rolling{border-color:var(--tally);box-shadow:0 0 0 1px var(--tally) inset}
+.monitor-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.state{font-weight:750;font-size:14px;display:flex;align-items:center;gap:8px;color:var(--muted)}
+.state .rdot{width:10px;height:10px;border-radius:50%;background:var(--dim)}
+.monitor.rolling .state{color:var(--tally)}
+.monitor.rolling .state .rdot{background:var(--tally);animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:.25}}
+.readout{font-family:var(--font-tc);font-stretch:75%;font-weight:600;font-size:64px;letter-spacing:-.03em;line-height:1;text-align:center;margin:18px 0 12px;white-space:nowrap;overflow:hidden}
+.readout .sep{color:var(--dim);font-weight:400}
+.readout .ff{font-weight:300}
+.ticks{display:flex;gap:2px;height:8px;margin:0 2px}
+.ticks i{flex:1;border-radius:2px;background:var(--tick)}
+.ticks i.on{background:var(--muted)}
+.ticks i.now{background:var(--text)}
+.monitor.rolling .ticks i.now{background:var(--tally)}
+.meta{display:flex;justify-content:space-between;margin-top:10px;color:var(--muted);font-size:14px;font-weight:600}
+.meta .el{font-family:var(--font-tc);font-stretch:80%;font-weight:500;color:var(--text)}
+.roll{width:100%;height:60px;margin-top:14px;border-radius:var(--r-md);font-weight:800;font-size:19px;font-stretch:112%;display:flex;align-items:center;justify-content:center;gap:12px;background:var(--tally);color:#fff}
+.roll .sq{width:16px;height:16px;border-radius:50%;background:#fff}
+.roll.stop{background:var(--panel-2);color:var(--text);border:1px solid var(--line)}
+.roll.stop .sq{border-radius:3px;background:var(--tally)}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px}
+@media (min-width:600px) and (max-width:899px){.grid{grid-template-columns:repeat(4,1fr)}}
+.mk{position:relative;height:68px;border-radius:var(--r-md);padding:10px 12px;text-align:left;font-weight:750;font-size:16px;line-height:1.15;display:flex;align-items:flex-end;overflow:hidden;transition:opacity .2s, transform .06s}
+.mk .n{position:absolute;top:8px;right:10px;font-family:var(--font-tc);font-stretch:80%;font-size:13px;font-weight:500;opacity:.75}
+.mk.off{opacity:.32}
+.mk:active{transform:scale(.97)}
+.mk.flash::after{content:"";position:absolute;inset:0;background:#fff;animation:flash .35s ease-out forwards}
+@keyframes flash{from{opacity:.65}to{opacity:0}}
+.after-stop{margin-top:14px;display:grid;gap:10px}
+.log-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+.log-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.log-head h3{font-size:17px}
+.log-head span{color:var(--muted);font-weight:600;font-size:14px}
+.log{list-style:none;margin:0;padding:0;max-height:none}
+.log li button{display:grid;grid-template-columns:2.6em auto 1fr;align-items:center;gap:12px;width:100%;padding:12px 16px;text-align:left;border-bottom:1px solid var(--line)}
+.log li:last-child button{border-bottom:0}
+.log li button:active{background:var(--panel-2)}
+.log .num{color:var(--muted);font-weight:600}
+.log .tc{font-family:var(--font-tc);font-stretch:80%;font-weight:500;font-size:15px}
+.log .nm{display:flex;align-items:center;gap:8px;min-width:0;font-weight:650}
+.log .nm i{width:10px;height:10px;border-radius:3px;flex:none}
+.log .nm span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log .note{grid-column:3;color:var(--muted);font-size:13px;font-weight:500;margin-top:-6px}
+.log-empty{padding:22px 16px;color:var(--muted)}
+
+/* Sheets */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;opacity:0;transition:opacity .2s}
+.scrim.show{opacity:1}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:92dvh;overflow:auto;background:var(--panel);border-radius:22px 22px 0 0;z-index:41;padding:8px 18px calc(24px + var(--safe-b));transform:translateY(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);box-shadow:var(--shadow);-webkit-overflow-scrolling:touch}
+.sheet.show{transform:none}
+@media (max-width:699px){
+  .sheet{bottom:var(--kb,0px);max-height:calc(var(--vvh,100dvh) - var(--safe-t) - 18px);transition:transform .28s cubic-bezier(.2,.8,.2,1), bottom .2s ease-out}
+}
+html.sheet-open, html.sheet-open body{overflow:hidden;overscroll-behavior:none}
+@media (min-width:700px){.sheet{left:50%;right:auto;bottom:auto;top:50%;width:560px;border-radius:22px;transform:translate(-50%,-46%);opacity:0;transition:transform .22s, opacity .22s;padding-bottom:24px}.sheet.show{transform:translate(-50%,-50%);opacity:1}}
+@media (prefers-reduced-motion:reduce){.sheet,.scrim,.monitor{transition:none}.mk.flash::after{animation:none}.monitor.rolling .state .rdot{animation:none}}
+.grab{width:44px;height:5px;border-radius:3px;background:var(--muted);opacity:.6;margin:6px auto 6px;position:relative}
+.grab::before{content:"";position:absolute;left:-40px;right:-40px;top:-14px;bottom:-14px}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 -18px 14px;padding:10px 18px 10px;position:sticky;top:-8px;z-index:2;background:var(--panel)}
+.sheet-head .icon-btn{flex:none;width:40px;height:40px;background:var(--panel-2);border:1px solid var(--line);color:var(--text)}
+.sheet-head .icon-btn svg{width:18px;height:18px}
+.sheet-head .icon-btn:active{background:var(--line)}
+.sheet.dragging{transition:none!important}
+.offline-st{margin:0;padding:12px 14px;border-radius:var(--r-md);background:var(--panel-2);border:1px solid var(--line);color:var(--muted);font-size:14.5px}
+.offline-st[data-state="ready"]{color:var(--text);border-color:color-mix(in srgb,var(--ok) 55%,var(--line))}
+.offline-st[data-state="ready"]::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:8px;vertical-align:middle}
+.sheet-head h2{font-size:21px;font-stretch:110%}
+.sheet section{margin-bottom:24px}
+.sheet h3{font-size:15px;margin-bottom:10px}
+.hint{color:var(--muted);font-size:14px;margin:6px 0 0}
+.seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-md);padding:3px;gap:3px;overflow-x:auto}
+.seg button{flex:1;height:40px;border-radius:9px;font-weight:650;font-size:15px;color:var(--muted);white-space:nowrap;padding:0 10px}
+.seg button[aria-pressed="true"]{background:var(--panel-2);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.field label{font-weight:650;font-size:14px;color:var(--muted)}
+.input,select.input,textarea.input{height:48px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--bg);color:var(--text);padding:0 14px;font:inherit;font-size:16px;width:100%}
+textarea.input{height:84px;padding:12px 14px;resize:vertical}
+.tc-input{font-family:var(--font-tc);font-stretch:80%;font-size:26px;height:60px;text-align:center;letter-spacing:.02em}
+.stepper{display:flex;align-items:center;gap:10px}
+.stepper button{width:44px;height:44px;border-radius:var(--r-md);background:var(--panel-2);border:1px solid var(--line);font-size:22px;font-weight:600}
+.stepper output{min-width:7ch;text-align:center;font-weight:700}
+
+/* Sync sheet */
+.cam{position:relative;aspect-ratio:4/3;border-radius:var(--r-md);overflow:hidden;background:#000}
+.cam video{width:100%;height:100%;object-fit:cover;display:block}
+.cam .guide{position:absolute;left:7%;right:7%;top:37%;height:26%;border:2px solid #fff;border-radius:10px;box-shadow:0 0 0 999px rgba(0,0,0,.42)}
+.cam .guide.locked{border-color:var(--ok)}
+.cam .cam-msg{position:absolute;left:0;right:0;bottom:10px;text-align:center;color:#fff;font-weight:650;font-size:14px;text-shadow:0 1px 3px #000}
+.readbox{margin:12px 0;padding:14px;border-radius:var(--r-md);background:var(--bg);border:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}
+.readbox .big{font-family:var(--font-tc);font-stretch:80%;font-size:28px;font-weight:500}
+.readbox .st{color:var(--muted);font-size:14px;font-weight:600;text-align:right}
+.readbox.locked{border-color:var(--ok)}
+.readbox.locked .st{color:var(--ok)}
+.meter{height:8px;border-radius:4px;background:var(--bg);border:1px solid var(--line);overflow:hidden;margin-bottom:12px}
+.meter i{display:block;height:100%;width:0;background:var(--ok);transition:width .08s}
+.tapbig{width:100%;height:120px;border-radius:var(--r-lg);background:var(--text);color:var(--bg);font-weight:800;font-size:20px;font-stretch:110%;margin-top:4px}
+.tapbig:active{transform:scale(.985)}
+.zoomrow{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:14px;font-weight:650;color:var(--muted)}
+.zoomrow input{flex:1}
+
+/* Settings */
+.looks{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.look{border:1px solid var(--line);border-radius:var(--r-md);padding:10px;text-align:left;background:var(--bg)}
+.look[aria-pressed="true"]{border-color:var(--text);box-shadow:0 0 0 1px var(--text) inset}
+.look b{display:block;font-size:14px;margin-bottom:8px}
+.look .sw{display:grid;grid-template-columns:repeat(8,1fr);gap:3px}
+.look .sw i{height:18px;border-radius:3px}
+.bedit{display:grid;grid-template-columns:44px 1fr 44px;gap:10px;align-items:center;margin-bottom:10px}
+.bedit .rm{color:var(--muted)}
+.bedit .rm:disabled{opacity:.3}
+.bedit .rm svg{width:18px;height:18px}
+#addButton{margin:4px 0 6px}
+#addButton:disabled{opacity:.5}
+.bedit .meta2{grid-column:2/4;margin-top:-6px;color:var(--muted);font-size:12.5px;font-weight:600}
+.colorwell{width:44px;height:44px;border-radius:var(--r-md);border:1px solid var(--line);padding:0;overflow:hidden;position:relative}
+.colorwell input{position:absolute;inset:-8px;width:calc(100% + 16px);height:calc(100% + 16px);border:0;padding:0;cursor:pointer;opacity:0}
+.colorwell i{position:absolute;inset:0}
+.swpick{display:flex;flex-wrap:wrap;gap:8px}
+.swpick button{width:38px;height:38px;border-radius:10px;border:2px solid transparent}
+.swpick button[aria-pressed="true"]{border-color:var(--text);box-shadow:0 0 0 2px var(--panel) inset}
+pre.preview{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-md);padding:12px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.5;max-height:200px;overflow:auto;white-space:pre;-webkit-user-select:text;user-select:text;margin:0}
+.steps{margin:8px 0 0;padding-left:20px;color:var(--muted);font-size:14px}
+.steps li{margin-bottom:4px}
+.warnbox{border:1px solid var(--warn);color:var(--text);background:color-mix(in srgb,var(--warn) 12%,transparent);border-radius:var(--r-md);padding:10px 12px;font-size:14px;margin-bottom:12px}
+
+/* Toast */
+.toast{position:fixed;left:50%;bottom:calc(92px + var(--safe-b));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:var(--text);color:var(--bg);border-radius:14px;padding:12px 14px 12px 16px;font-weight:650;font-size:15px;display:flex;align-items:center;gap:14px;z-index:60;transition:.2s;width:max-content;max-width:calc(100vw - 32px);box-shadow:var(--shadow)}
+.toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{font-weight:800;text-decoration:underline;text-underline-offset:3px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></g></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></g></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.4l2 2.2h8.6A1.5 1.5 0 0 1 21 9.7v8.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+</svg>
+
+<!-- HOME -->
+<main id="home" class="app">
+  <header class="bar">
+    <button class="icon-btn hidden" id="folderBack" aria-label="All sessions"><svg><use href="#i-back"/></svg></button>
+    <div class="brand grow" id="brand"><i></i>Tally</div>
+    <div class="grow hidden" id="folderTitleWrap"><button class="title-btn folder-title" id="folderTitle" aria-label="Rename folder"></button></div>
+    <button class="icon-btn hidden" id="folderExport" aria-label="Export every session in this folder"><svg><use href="#i-share"/></svg></button>
+    <button class="icon-btn" data-open="settings" aria-label="Settings"><svg><use href="#i-gear"/></svg></button>
+  </header>
+  <section class="clock-card">
+    <button class="pill" data-open="sync" id="homePill"><span class="dot"></span><span class="lbl"></span><span class="age"></span></button>
+    <div class="tc-mid" id="homeTC">--:--:--:--</div>
+    <div class="row"><button class="btn primary block" data-open="sync">Sync to camera</button></div>
+  </section>
+  <div class="list-head">
+    <h2 id="listH">Sessions</h2>
+    <div class="list-acts"><button class="text-btn" id="newFolder">New folder</button><button class="text-btn" id="selToggle">Select</button></div>
+  </div>
+  <div id="sessionList"></div>
+  <button class="fab" id="newSession"><svg><use href="#i-plus"/></svg><span>New session</span></button>
+  <div class="selbar hidden" id="selBar">
+    <button class="btn danger" id="selDelete">Delete</button>
+    <button class="btn" id="selMove">Move</button>
+    <button class="btn primary" id="selExport">Export</button>
+  </div>
+</main>
+
+<!-- RECORDER -->
+<main id="rec" class="app hidden">
+  <header class="bar">
+    <button class="icon-btn" id="recBack" aria-label="All sessions"><svg><use href="#i-back"/></svg></button>
+    <div class="grow"><button class="title-btn" id="recTitle" aria-label="Rename session"></button></div>
+    <button class="icon-btn" id="recExport" aria-label="Export markers"><svg><use href="#i-share"/></svg></button>
+    <button class="icon-btn" data-open="settings" aria-label="Settings"><svg><use href="#i-gear"/></svg></button>
+  </header>
+  <div class="rec-layout">
+    <div>
+      <div class="monitor" id="monitor">
+        <div class="monitor-top">
+          <div class="state"><span class="rdot"></span><span id="stateLbl">Standby</span></div>
+          <button class="pill" data-open="sync" id="recPill"><span class="dot"></span><span class="lbl"></span><span class="age"></span></button>
+        </div>
+        <div class="readout" id="readout" aria-live="off">--:--:--:--</div>
+        <div class="ticks" id="ticks"></div>
+        <div class="meta"><span id="recRate"></span><span class="el" id="recElapsed"></span></div>
+      </div>
+      <button class="roll" id="rollBtn"><span class="sq"></span><span id="rollLbl">End session</span></button>
+      <div class="grid" id="markGrid"></div>
+    </div>
+    <div class="rec-side">
+      <div class="log-wrap">
+        <div class="log-head"><h3>Markers</h3><span id="logCount"></span></div>
+        <ol class="log" id="markLog"></ol>
+      </div>
+      <div class="after-stop" id="afterStop">
+        <button class="btn primary block" id="exportBig"><svg><use href="#i-share"/></svg>Export for Resolve</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="scrim hidden" id="scrim"></div>
+
+<!-- SYNC SHEET -->
+<div class="sheet hidden" id="sheet-sync" role="dialog" aria-modal="true" aria-labelledby="syncH">
+  <div class="grab"></div>
+  <div class="sheet-head"><h2 id="syncH">Sync timecode</h2><button class="icon-btn" data-close aria-label="Close"><svg><use href="#i-close"/></svg></button></div>
+  <section>
+    <div class="field"><label for="syncRate">Frame rate</label><select class="input" id="syncRate"></select></div>
+    <div class="seg" id="syncTabs">
+      <button data-tab="cam" aria-pressed="true">Camera</button>
+      <button data-tab="ltc" aria-pressed="false">LTC</button>
+      <button data-tab="man" aria-pressed="false">Manual</button>
+      <button data-tab="tod" aria-pressed="false">Clock</button>
+    </div>
+  </section>
+
+  <section data-pane="cam">
+    <div class="cam"><video id="camVideo" playsinline muted autoplay></video><div class="guide" id="camGuide"></div><div class="cam-msg" id="camMsg">Fit the camera's timecode inside the box</div></div>
+    <div class="zoomrow hidden" id="zoomRow"><span>Zoom</span><input type="range" id="zoom" data-nodrag min="1" max="5" step="0.1" value="1"></div>
+    <div class="readbox" id="camRead"><span class="big" id="camTC">--:--:--:--</span><span class="st" id="camSt">Not scanning</span></div>
+    <div class="row"><button class="btn go" id="camStart">Start scanning</button><button class="btn quiet" id="camUse" disabled>Use this sync</button></div>
+    <p class="hint">Hold steady until three readings agree. Works best when the digits are sharp and fill the box.</p>
+  </section>
+
+  <section data-pane="ltc" class="hidden">
+    <div class="readbox" id="ltcRead"><span class="big" id="ltcTC">--:--:--:--</span><span class="st" id="ltcSt">Not listening</span></div>
+    <div class="meter"><i id="ltcMeter"></i></div>
+    <div class="row"><button class="btn go" id="ltcStart">Start listening</button><button class="btn quiet" id="ltcUse" disabled>Use this sync</button></div>
+    <p class="hint">Feed LTC into the iPhone (camera TC out or a sync box, through a mic adapter), or hold the mic near a speaker playing LTC.</p>
+  </section>
+
+  <section data-pane="man" class="hidden">
+    <div class="field"><label for="manTC">Timecode to catch</label><input class="input tc-input" id="manTC" inputmode="numeric" autocomplete="off" placeholder="00:00:00:00"></div>
+    <button class="tapbig" id="manTap">Tap the moment the camera hits it</button>
+    <p class="hint">Type a timecode a few seconds ahead of the camera, frames at 00, then tap as the seconds turn over.</p>
+  </section>
+
+  <section data-pane="tod" class="hidden">
+    <p class="hint" style="margin:0 0 14px">Use this when the camera is set to time-of-day timecode. It reads this phone's clock.</p>
+    <button class="btn primary block" id="todUse">Use time of day</button>
+  </section>
+
+  <section>
+    <h3>Fine offset</h3>
+    <div class="stepper"><button id="offMinus" aria-label="One frame earlier">−</button><output id="offOut">0 frames</output><button id="offPlus" aria-label="One frame later">+</button></div>
+    <p class="hint">Nudge if Tally reads ahead of or behind the camera. Applies right away.</p>
+  </section>
+</div>
+
+<!-- SETTINGS SHEET -->
+<div class="sheet hidden" id="sheet-settings" role="dialog" aria-modal="true" aria-labelledby="setH">
+  <div class="grab"></div>
+  <div class="sheet-head"><h2 id="setH">Settings</h2><button class="icon-btn" data-close aria-label="Close"><svg><use href="#i-close"/></svg></button></div>
+  <section>
+    <h3>Camera frame rate</h3>
+    <select class="input" id="setRate" aria-label="Camera frame rate"></select>
+    <p class="hint">Match your camera's project frame rate. Use DF only if the camera's timecode is set to drop frame (shown with a semicolon, like 01:00:00;00).</p>
+  </section>
+  <section>
+    <h3>Offline</h3>
+    <p class="offline-st" id="offlineSt">Checking…</p>
+  </section>
+  <section>
+    <h3>Appearance</h3>
+    <div class="seg" id="themeSeg"><button data-theme-set="dark">Dark</button><button data-theme-set="light">Light</button></div>
+  </section>
+  <section>
+    <h3>Button looks</h3>
+    <div class="looks" id="looks"></div>
+  </section>
+  <section>
+    <h3>Marker buttons</h3>
+    <p class="hint" id="btnFor" style="margin:-4px 0 12px"></p>
+    <div id="bedits"></div>
+    <button class="btn block" id="addButton">Add button</button>
+    <p class="hint">Resolve has 16 marker colors. Each button exports as the closest one, shown under its name.</p>
+  </section>
+  <section>
+    <h3>Saved layouts</h3>
+    <div class="row"><button class="btn" id="saveLayout">Save layout</button><button class="btn" id="loadLayout">Load layout</button></div>
+    <button class="btn block" id="resetButtons" style="margin-top:10px">Restore defaults</button>
+  </section>
+</div>
+
+<!-- LAYOUT PICKER -->
+<div class="sheet hidden" id="sheet-layouts" role="dialog" aria-modal="true" aria-labelledby="layH">
+  <div class="grab"></div>
+  <div class="sheet-head"><h2 id="layH">Load a layout</h2><button class="icon-btn" data-close aria-label="Close"><svg><use href="#i-close"/></svg></button></div>
+  <p class="hint" id="layHint" style="margin:-6px 0 14px"></p>
+  <div id="layList" class="lays"></div>
+</div>
+
+<!-- MOVE SHEET -->
+<div class="sheet hidden" id="sheet-move" role="dialog" aria-modal="true" aria-labelledby="moveH">
+  <div class="grab"></div>
+  <div class="sheet-head"><h2 id="moveH">Move session</h2><button class="icon-btn" data-close aria-label="Close"><svg><use href="#i-close"/></svg></button></div>
+  <div id="moveList" class="mlist"></div>
+</div>
+
+<!-- MARKER EDIT SHEET -->
+<div class="sheet hidden" id="sheet-marker" role="dialog" aria-modal="true" aria-labelledby="mkH">
+  <div class="grab"></div>
+  <div class="sheet-head"><h2 id="mkH">Marker</h2><button class="icon-btn" data-close aria-label="Close"><svg><use href="#i-close"/></svg></button></div>
+  <div class="field"><label for="mkName">Name</label><input class="input" id="mkName" maxlength="80"></div>
+  <div class="field"><label for="mkTC">Timecode</label><input class="input tc-input" id="mkTC" inputmode="numeric" autocomplete="off"></div>
+  <div class="field"><label>Color</label><div class="swpick" id="mkColors"></div></div>
+  <div class="field"><label for="mkNote">Note</label><textarea class="input" id="mkNote" maxlength="300" placeholder="Optional"></textarea></div>
+  <div class="row"><button class="btn danger" id="mkDelete">Delete marker</button><button class="btn primary" id="mkSave">Save marker</button></div>
+</div>
+
+<!-- EXPORT SHEET -->
+<div class="sheet hidden" id="sheet-export" role="dialog" aria-modal="true" aria-labelledby="exH">
+  <div class="grab"></div>
+  <div class="sheet-head"><h2 id="exH">Export markers</h2><button class="icon-btn" data-close aria-label="Close"><svg><use href="#i-close"/></svg></button></div>
+  <section>
+    <div class="seg" id="fmtSeg"><button data-fmt="edl">Resolve EDL</button><button data-fmt="csv">CSV</button><button data-fmt="txt">Text list</button></div>
+    <div class="seg hidden" id="combineSeg" style="margin-top:10px"><button data-comb="0">One file per session</button><button data-comb="1">Combine into one</button></div>
+    <div class="warnbox hidden" id="exWarn" style="margin-top:12px"></div>
+  </section>
+  <section>
+    <pre class="preview" id="exPreview"></pre>
+  </section>
+  <div class="row"><button class="btn" id="exCopy">Copy</button><button class="btn" id="exDownload">Download</button><button class="btn primary" id="exShare">Share</button></div>
+  <section id="exHelp" style="margin-top:18px;margin-bottom:0">
+    <h3>Bring markers into Resolve</h3>
+    <ol class="steps">
+      <li>Set the timeline's start timecode to match the clip's source timecode, so the numbers line up.</li>
+      <li>In the Media Pool, right-click the timeline and choose Timelines, Import, Timeline Markers from EDL.</li>
+      <li>Pick the .edl file. Markers land with their names and colors.</li>
+    </ol>
+  </section>
+</div>
+
+<!-- PROMPT SHEET -->
+<div class="sheet hidden" id="sheet-prompt" role="dialog" aria-modal="true" aria-labelledby="prH">
+  <div class="grab"></div>
+  <div class="sheet-head"><h2 id="prH"></h2></div>
+  <p class="hint hidden" id="prMsg" style="margin:-6px 0 16px"></p>
+  <div class="field" id="prField"><input class="input" id="prInput" maxlength="80"></div>
+  <div class="row"><button class="btn" id="prCancel">Cancel</button><button class="btn primary" id="prOk"></button></div>
+</div>
+
+<div class="toast" id="toast" role="status"><span id="toastMsg"></span><button id="toastAct" class="hidden"></button></div>
+<script>
+// ===== Timecode math =====
+const RATES = [
+  { id:'23.976', label:'23.976', base:24, num:24000, den:1001, df:false },
+  { id:'24',     label:'24',     base:24, num:24,    den:1,    df:false },
+  { id:'25',     label:'25',     base:25, num:25,    den:1,    df:false },
+  { id:'29.97',  label:'29.97 NDF', base:30, num:30000, den:1001, df:false },
+  { id:'29.97df',label:'29.97 DF',  base:30, num:30000, den:1001, df:true },
+  { id:'30',     label:'30',     base:30, num:30,    den:1,    df:false },
+  { id:'48',     label:'48',     base:48, num:48,    den:1,    df:false },
+  { id:'50',     label:'50',     base:50, num:50,    den:1,    df:false },
+  { id:'59.94',  label:'59.94 NDF', base:60, num:60000, den:1001, df:false },
+  { id:'59.94df',label:'59.94 DF',  base:60, num:60000, den:1001, df:true },
+  { id:'60',     label:'60',     base:60, num:60,    den:1,    df:false },
+];
+const rateById = id => RATES.find(r => r.id === id) || RATES[0];
+const realFps = r => r.num / r.den;
+function framesPerDay(r){
+  if(!r.df) return r.base*86400;
+  const drop = r.base===30?2:4;
+  return (r.base*600 - drop*9) * 144;
+}
+function framesToParts(f, r){
+  const day = framesPerDay(r);
+  f = ((Math.floor(f) % day) + day) % day;
+  if(r.df){
+    const drop = r.base===30?2:4;
+    const per10 = r.base*600 - drop*9, perMin = r.base*60 - drop;
+    const d = Math.floor(f/per10), m = f % per10;
+    f += drop*9*d + (m > drop ? drop*Math.floor((m-drop)/perMin) : 0);
+  }
+  const b = r.base;
+  return { h:Math.floor(f/(b*3600)), m:Math.floor(f/(b*60))%60, s:Math.floor(f/b)%60, f:f%b };
+}
+function partsToFrames(h,m,s,fr,r){
+  const b = r.base;
+  let total = ((h*60+m)*60+s)*b + fr;
+  if(r.df){
+    const drop = r.base===30?2:4, tm = h*60+m;
+    total -= drop*(tm - Math.floor(tm/10));
+  }
+  return total;
+}
+const p2 = n => String(n).padStart(2,'0');
+function framesToTC(f, r){
+  const p = framesToParts(f, r);
+  return `${p2(p.h)}:${p2(p.m)}:${p2(p.s)}${r.df?';':':'}${p2(p.f)}`;
+}
+function parseTC(str, r){
+  const d = String(str).replace(/\D/g,'');
+  if(d.length < 8) return null;
+  const x = d.slice(-8);
+  const h=+x.slice(0,2), m=+x.slice(2,4), s=+x.slice(4,6), f=+x.slice(6,8);
+  if(h>23||m>59||s>59||f>=r.base) return null;
+  if(r.df){ const drop=r.base===30?2:4; if(s===0 && m%10!==0 && f<drop) return null; }
+  return partsToFrames(h,m,s,f,r);
+}
+
+// ===== LTC decoder (biphase mark) =====
+class LTCDecoder {
+  constructor(sampleRate, onFrame){
+    this.sr = sampleRate; this.onFrame = onFrame;
+    this.T = sampleRate/2000;           // bit period estimate (samples)
+    this.lastCross = 0; this.n = 0;
+    this.state = 0; this.hi = 0.02;     // hysteresis
+    this.halfPending = false;
+    this.bits = new Uint8Array(80); this.count = 0;
+    this.dc = 0; this.peak = 0;
+  }
+  process(buf){
+    for(let i=0;i<buf.length;i++){
+      let x = buf[i];
+      this.dc += (x - this.dc)*0.001; x -= this.dc;
+      const ax = Math.abs(x); this.peak = Math.max(ax, this.peak*0.9995);
+      const th = Math.max(0.004, this.peak*0.2);
+      let ns = this.state;
+      if(x > th) ns = 1; else if(x < -th) ns = -1;
+      if(ns !== this.state && ns !== 0){
+        if(this.state !== 0) this.edge(this.n + i, i);
+        this.state = ns;
+      }
+    }
+    this.n += buf.length;
+  }
+  edge(pos, idx){
+    const iv = pos - this.lastCross; this.lastCross = pos;
+    if(iv > this.T*1.6 || iv < this.T*0.25){ this.halfPending=false; this.T = Math.min(Math.max(iv*(iv>this.T?0.5:1), this.sr/3200), this.sr/1400)*0.2 + this.T*0.8; return; }
+    if(iv > this.T*0.75){
+      if(this.halfPending){ this.halfPending=false; }   // resync
+      this.T += (iv - this.T)*0.1; this.push(0, idx);
+    } else {
+      if(this.halfPending){ this.halfPending=false; this.push(1, idx); }
+      else this.halfPending = true;
+      this.T += (iv*2 - this.T)*0.05;
+    }
+  }
+  push(b, idx){
+    this.bits.copyWithin(0,1); this.bits[79] = b; this.count++;
+    const B = this.bits;
+    // sync word bits 64..79: 0011 1111 1111 1101
+    if(B[64]===0&&B[65]===0&&B[66]===1&&B[67]===1&&B[68]===1&&B[69]===1&&B[70]===1&&B[71]===1&&
+       B[72]===1&&B[73]===1&&B[74]===1&&B[75]===1&&B[76]===1&&B[77]===1&&B[78]===0&&B[79]===1){
+      const v = (s,n)=>{ let r=0; for(let k=0;k<n;k++) r |= B[s+k]<<k; return r; };
+      const fr = v(0,4) + 10*v(8,2), s = v(16,4)+10*v(24,3), m = v(32,4)+10*v(40,3), h = v(48,4)+10*v(56,2);
+      const df = B[10]===1;
+      if(h<24 && m<60 && s<60 && fr<40){
+        this.onFrame({h,m,s,f:fr,df, sampleIndex: idx, fpsEst: this.sr/(this.T*80)});
+      }
+    }
+  }
+}
+// ================= Storage (works in Claude artifacts and when self-hosted) =================
+const Store = {
+  async get(k){
+    if(window.storage){ try{ const r = await window.storage.get(k, false); return r ? JSON.parse(r.value) : null; }catch(e){ return null; } }
+    try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; }catch(e){ return Store._mem[k] ?? null; }
+  },
+  async set(k, v){
+    const s = JSON.stringify(v);
+    if(window.storage){ try{ await window.storage.set(k, s, false); }catch(e){ console.warn('save failed', e); } return; }
+    try{ localStorage.setItem(k, s); }catch(e){ Store._mem[k] = v; }
+  },
+  _mem:{}
+};
+
+// ================= Colors =================
+const RESOLVE_COLORS = {
+  Blue:'#3d7cf2', Cyan:'#2fc5d8', Green:'#3fb24a', Yellow:'#f2c12e', Red:'#e8423a', Pink:'#f35ca8',
+  Purple:'#9a4fd1', Fuchsia:'#c33db8', Rose:'#f08ca0', Lavender:'#a795f0', Sky:'#86c8f0', Mint:'#72ddb0',
+  Lemon:'#ecec70', Sand:'#c8a06a', Cocoa:'#6e4e3c', Cream:'#f2e6cc'
+};
+const LOOKS = [
+  { id:'resolve', name:'Resolve', colors:['#3fb24a','#e8423a','#f2c12e','#3d7cf2','#9a4fd1','#2fc5d8','#f35ca8','#c8a06a','#a795f0','#72ddb0'] },
+  { id:'signal',  name:'Signal',  colors:['#1fe07a','#ff3d3d','#ffd400','#2f8cff','#b45cff','#00e0ff','#ff4fb8','#ff8a00','#c8ff2e','#ff6a5a'] },
+  { id:'pastel',  name:'Pastel',  colors:['#9fe3b4','#f4a3a3','#f6e3a0','#a9c8f5','#cdb4f2','#a6e6ee','#f5b8d6','#e8cda8','#d9f0a3','#f2c6b4'] },
+  { id:'film',    name:'Film stock', colors:['#6e9a5e','#b5473a','#d9a441','#4f7091','#7d5a86','#5e9c9a','#c47a8a','#9c7b55','#a3a35a','#5a6b7d'] },
+  { id:'muted',   name:'Low light', colors:['#4f8a68','#a8463e','#a98a33','#44679f','#6f5599','#3f8a93','#9f5781','#8a7253','#6b8a3f','#7a5f6e'] },
+  { id:'mono',    name:'Mono',    colors:['#f2f2f2','#d6d6d6','#bababa','#9e9e9e','#828282','#666666','#4a4a4a','#2e2e2e','#1a1a1a','#787878'] },
+];
+const DEFAULT_NAMES = ['Good take','Bad take','Circle take','Hold','Line flub','Focus issue','Audio issue','B-roll','Pickup','Note'];
+const MAX_BUTTONS = 10, DEFAULT_BUTTONS = 4;
+function hexToRgb(h){ h=h.replace('#',''); if(h.length===3) h=[...h].map(c=>c+c).join(''); const n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function rgbToLab([r,g,b]){
+  const f=c=>{c/=255; return c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);};
+  r=f(r); g=f(g); b=f(b);
+  let x=(r*0.4124+g*0.3576+b*0.1805)/0.95047, y=(r*0.2126+g*0.7152+b*0.0722), z=(r*0.0193+g*0.1192+b*0.9505)/1.08883;
+  const t=v=>v>0.008856?Math.cbrt(v):(7.787*v+16/116);
+  x=t(x); y=t(y); z=t(z);
+  return [116*y-16, 500*(x-y), 200*(y-z)];
+}
+function nearestResolve(hex){
+  const a=rgbToLab(hexToRgb(hex)); let best='Blue', bd=Infinity;
+  for(const [name,h] of Object.entries(RESOLVE_COLORS)){ const b=rgbToLab(hexToRgb(h)); const d=(a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2; if(d<bd){bd=d;best=name;} }
+  return best;
+}
+function inkFor(hex){ const [r,g,b]=hexToRgb(hex).map(c=>{c/=255;return c<=0.03928?c/12.92:Math.pow((c+0.055)/1.055,2.4);}); const L=0.2126*r+0.7152*g+0.0722*b; return L>0.33?'#0d1114':'#ffffff'; }
+
+// ================= State =================
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const epochNow = () => performance.timeOrigin + performance.now();
+const evEpoch = e => (e && e.timeStamp > 0 && e.timeStamp < 1e12) ? performance.timeOrigin + e.timeStamp : epochNow();
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+const esc = s => String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const defaultButtons = () => DEFAULT_NAMES.slice(0, DEFAULT_BUTTONS).map((n,i)=>({id:uid(), name:n, color:LOOKS[0].colors[i]}));
+const isEnded = s => s.status === 'ended' || s.status === 'stopped';
+const S = {
+  settings: { theme:'dark', look:'resolve', offset:0, buttons: defaultButtons() },
+  sync: null,         // {frames, epoch, rateId, source, at}
+  sessions: [],
+  folders: [], folderId: null, layouts: [],
+  view: 'home', currentId: null, selectMode: false, selected: new Set()
+};
+const saveSettings = () => Store.set('tally:settings', S.settings);
+const saveSync = () => Store.set('tally:sync', S.sync);
+const saveSessions = () => Store.set('tally:sessions', S.sessions);
+
+// ================= Clock =================
+function todAnchor(rateId){
+  const r = rateById(rateId), now = epochNow(), d = new Date(now);
+  return { frames: partsToFrames(d.getHours(), d.getMinutes(), d.getSeconds(), 0, r), epoch: now - d.getMilliseconds(), rateId, source:'tod', at: now };
+}
+const clockRate = () => rateById(S.sync.rateId);
+function framesAt(epoch){ return S.sync.frames + (epoch - S.sync.epoch) / 1000 * realFps(clockRate()) + S.settings.offset; }
+const framesNow = () => framesAt(epochNow());
+const SRC_LABEL = { cam:'Camera', ltc:'Audio LTC', man:'Manual', tod:'Time of day' };
+function ageText(ms){ const m = Math.floor(ms/60000); if(m < 1) return 'now'; if(m < 60) return m+'m'; const h = Math.floor(m/60); return h+'h'+(m%60? ' '+(m%60)+'m':''); }
+function renderPills(){
+  const age = epochNow() - S.sync.at, stale = S.sync.source !== 'tod' && age > 4*3600e3;
+  for(const p of ['#homePill','#recPill']){
+    const el = $(p); el.classList.toggle('ok', !stale && S.sync.source !== 'tod'); el.classList.toggle('warn', stale);
+    el.querySelector('.lbl').textContent = SRC_LABEL[S.sync.source] + ' ' + clockRate().label;
+    el.querySelector('.age').textContent = S.sync.source === 'tod' ? '' : (stale ? 're-sync' : ageText(age));
+  }
+}
+
+// ================= Sessions =================
+const cur = () => S.sessions.find(s => s.id === S.currentId);
+const sortedMarkers = s => [...s.markers].sort((a,b)=>a.frames-b.frames);
+function sessionRange(s){
+  if(!s.rolls.length) return '';
+  const r = rateById(s.rateId), a = s.rolls[0].start, last = s.rolls[s.rolls.length-1];
+  return framesToTC(a, r) + (last.end != null ? ' to ' + framesToTC(last.end, r) : '');
+}
+function newSessionName(){
+  const d = new Date(), base = d.toLocaleDateString(undefined,{month:'short', day:'numeric'});
+  const n = S.sessions.filter(s => s.name.startsWith(base)).length + 1;
+  return `${base} session ${n}`;
+}
+
+// ================= Views =================
+function show(view){
+  S.view = view;
+  $('#home').classList.toggle('hidden', view !== 'home');
+  $('#rec').classList.toggle('hidden', view !== 'rec');
+  if(view === 'home') renderHome(); else renderRec();
+  window.scrollTo(0,0);
+  lastF = null;
+  requestAnimationFrame(()=>{ frameOnce(); fitReadout(); });
+}
+// ================= Button layouts =================
+// Sessions use their folder's buttons; sessions outside a folder use the main list's buttons.
+const saveLayouts = () => Store.set('tally:layouts', S.layouts);
+const copyButtons = bs => bs.map(b => ({ id:uid(), name:b.name, color:b.color }));
+function buttonFolder(){
+  const fid = S.view === 'rec' ? (cur() && cur().folderId) : S.folderId;
+  return fid ? folderById(fid) || null : null;
+}
+function activeButtons(){
+  const f = buttonFolder();
+  if(f){ if(!Array.isArray(f.buttons) || !f.buttons.length) f.buttons = copyButtons(S.settings.buttons); return f.buttons; }
+  return S.settings.buttons;
+}
+function setActiveButtons(bs, look){
+  const f = buttonFolder();
+  if(f){ f.buttons = bs; if(look !== undefined) f.look = look; } else { S.settings.buttons = bs; if(look !== undefined) S.settings.look = look; }
+}
+const activeLook = () => { const f = buttonFolder(); return (f && f.look) || S.settings.look; };
+function saveButtons(){ buttonFolder() ? saveFolders() : saveSettings(); }
+function applyLayout(bs, label){
+  const prev = activeButtons().map(b => ({...b})), prevLook = activeLook();
+  setActiveButtons(copyButtons(bs), null); saveButtons();
+  if(S.view === 'rec') renderRec();
+  toast(`Buttons set to ${label}.`, 'Undo', () => { setActiveButtons(prev, prevLook); saveButtons(); if(S.view==='rec') renderRec(); if(openId==='settings') renderSettings(); });
+}
+
+// ================= Folders =================
+const saveFolders = () => Store.set('tally:folders', S.folders);
+const folderById = id => S.folders.find(f => f.id === id);
+const sessionsIn = fid => S.sessions.filter(s => (s.folderId || null) === (fid || null));
+function sessionWhen(s){
+  const d = new Date(s.created);
+  return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ', ' + d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+}
+function folderSpan(f){
+  const ss = sessionsIn(f.id); if(!ss.length) return 'Empty';
+  const days = [...new Set(ss.map(s => new Date(s.created).toDateString()))].length;
+  return `${ss.length} session${ss.length>1?'s':''}` + (days > 1 ? `, ${days} days` : '');
+}
+function openFolder(id){ swipeRow.close(); S.folderId = id; S.selectMode = false; S.selected.clear(); renderHome(); window.scrollTo(0,0); }
+
+// ================= Home =================
+function renderHome(){
+  swipeRow.open = null;
+  if(S.folderId && !folderById(S.folderId)) S.folderId = null;
+  const f = S.folderId ? folderById(S.folderId) : null;
+  const list = $('#sessionList');
+  // header
+  $('#brand').classList.toggle('hidden', !!f);
+  $('#folderBack').classList.toggle('hidden', !f);
+  $('#folderTitleWrap').classList.toggle('hidden', !f);
+  $('#folderExport').classList.toggle('hidden', !f);
+  if(f) $('#folderTitle').textContent = f.name;
+  $('#listH').textContent = f ? 'Sessions in this folder' : 'Sessions';
+  $('#newFolder').classList.toggle('hidden', !!f || S.selectMode);
+  $('#newSession').querySelector('span').textContent = f ? 'New session here' : 'New session';
+  const shown = sessionsIn(S.folderId);
+  $('#selToggle').textContent = S.selectMode ? 'Done' : 'Select';
+  $('#selToggle').classList.toggle('hidden', !shown.length);
+  $('#newSession').classList.toggle('hidden', S.selectMode);
+  $('#selBar').classList.toggle('hidden', !S.selectMode);
+  $('#selExport').textContent = S.selected.size ? `Export ${S.selected.size}` : 'Export';
+  $('#selExport').disabled = $('#selDelete').disabled = $('#selMove').disabled = !S.selected.size;
+
+  const folderRows = (!f && !S.selectMode) ? [...S.folders].sort((a,b)=>b.created-a.created).map(fd => {
+    const ss = sessionsIn(fd.id), n = ss.reduce((a,s)=>a+s.markers.length,0), live = ss.some(s => s.status === 'rolling');
+    return `<div class="swipe" data-reveal="176"><div class="acts"><button class="act" data-fren="${fd.id}" tabindex="-1">Rename</button><button class="act del" data-fdel="${fd.id}" tabindex="-1">Delete</button></div>
+      <button class="srow frow" data-fid="${fd.id}">
+        <span class="ficon" aria-hidden="true"><svg><use href="#i-folder"/></svg></span>
+        <span class="main"><span class="name">${esc(fd.name)}</span>
+          <span class="sub"><span>${folderSpan(fd)}</span>${live?'<span class="live">Live</span>':''}</span></span>
+        <span class="count" aria-label="${n} markers">${n}</span>
+        <svg class="chev" aria-hidden="true"><use href="#i-chev"/></svg>
+      </button></div>`;
+  }) : [];
+  const sessionRows = [...shown].sort((a,b)=>b.created-a.created).map(s => {
+    const sw = sortedMarkers(s).slice(0,24).map(m=>`<i style="background:${m.color}"></i>`).join('');
+    const sel = S.selected.has(s.id);
+    return `<div class="swipe" data-reveal="176"><div class="acts"><button class="act" data-move="${s.id}" tabindex="-1">Move</button><button class="act del" data-del="${s.id}" tabindex="-1">Delete</button></div>
+      <button class="srow ${sel?'sel':''}" data-sid="${s.id}">
+      ${S.selectMode ? '<span class="check"></span>' : ''}
+      <span class="main">
+        <span class="name">${esc(s.name)}</span>
+        <span class="sub"><span>${sessionWhen(s)}</span>${s.rateId?`<span>${rateById(s.rateId).label}</span>`:''}${s.status==='rolling'?'<span class="live">Live</span>':''}</span>
+        ${s.rolls.length?`<span class="sub"><span>${sessionRange(s)}</span></span>`:''}
+        ${sw?`<span class="swatches">${sw}</span>`:''}
+      </span>
+      <span class="count" aria-label="${s.markers.length} markers">${s.markers.length}</span>
+    </button></div>`;
+  });
+  if(!folderRows.length && !sessionRows.length){
+    list.innerHTML = f
+      ? `<div class="empty"><strong>No sessions in this folder yet</strong>Tap New session here to start one, or swipe a session left on the main list and choose Move.</div>`
+      : `<div class="empty"><strong>No sessions yet</strong>Sync to the camera, then start a named session and tap a button to log each moment. Use New folder to group shoot days for a project.</div>`;
+    return;
+  }
+  list.innerHTML = (folderRows.length ? `<div class="sessions folders">${folderRows.join('')}</div>` : '')
+    + (sessionRows.length ? `${folderRows.length ? '<h3 class="sub-head">Not in a folder</h3>' : ''}<div class="sessions">${sessionRows.join('')}</div>` : '');
+}
+$('#sessionList').addEventListener('click', e => {
+  if(swipeRow.justSwiped){ swipeRow.justSwiped = false; return; }
+  const act = e.target.closest('[data-del],[data-move],[data-fdel],[data-fren]');
+  if(act){
+    const ds = act.dataset;
+    if(ds.del) confirmDeleteSession(ds.del);
+    else if(ds.move) moveSessions([ds.move]);
+    else if(ds.fdel) confirmDeleteFolder(ds.fdel);
+    else if(ds.fren) renameFolder(ds.fren);
+    return;
+  }
+  if(swipeRow.open){ swipeRow.close(); return; }
+  const frow = e.target.closest('[data-fid]'); if(frow){ openFolder(frow.dataset.fid); return; }
+  const row = e.target.closest('[data-sid]'); if(!row) return;
+  const id = row.dataset.sid;
+  if(S.selectMode){ S.selected.has(id) ? S.selected.delete(id) : S.selected.add(id); renderHome(); return; }
+  S.currentId = id; show('rec');
+});
+
+// ---- Swipe a row left to reveal its actions ----
+const swipeRow = (() => {
+  const api = { open:null, justSwiped:false,
+    close(){ if(api.open){ api.open.style.transform = ''; api.open.closest('.swipe').classList.remove('open'); api.open = null; } } };
+  let d = null;
+  const list = $('#sessionList');
+  list.addEventListener('touchstart', e => {
+    if(S.selectMode || e.touches.length !== 1) return;
+    const row = e.target.closest('.srow'); if(!row) return;
+    if(api.open && api.open !== row) api.close();
+    const t = e.touches[0], reveal = +row.closest('.swipe').dataset.reveal || 96;
+    d = { row, reveal, x:t.clientX, y:t.clientY, t:performance.now(), base: api.open === row ? -reveal : 0, dx:0, on:false };
+  }, { passive:true });
+  list.addEventListener('touchmove', e => {
+    if(!d) return;
+    const t = e.touches[0], dx = t.clientX - d.x, dy = t.clientY - d.y;
+    if(!d.on){
+      if(Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)){ d = null; return; }   // vertical scroll wins
+      if(Math.abs(dx) < 10) return;
+      d.on = true; d.row.classList.add('dragging'); d.row.closest('.swipe').classList.add('open');
+    }
+    e.preventDefault();
+    let x = d.base + dx;
+    if(x > 0) x = x / 4;
+    d.dx = x; d.row.style.transform = `translateX(${x}px)`;
+  }, { passive:false });
+  const end = () => {
+    if(!d) return;
+    const { row, on, dx, t, base, reveal } = d; d = null;
+    if(!on) return;
+    api.justSwiped = true; setTimeout(() => api.justSwiped = false, 80);  // only swallow the click the swipe itself produces
+    row.classList.remove('dragging');
+    const v = (dx - base) / Math.max(1, performance.now() - t);
+    if(dx < -row.offsetWidth * 0.7){                       // long swipe: straight to the delete confirmation
+      row.style.transform = `translateX(${-reveal}px)`; api.open = row;
+      row.dataset.fid ? confirmDeleteFolder(row.dataset.fid) : confirmDeleteSession(row.dataset.sid);
+    } else if(dx < -reveal/2 || v < -0.5){
+      row.style.transform = `translateX(${-reveal}px)`; api.open = row;
+    } else {
+      row.style.transform = ''; row.closest('.swipe').classList.remove('open'); if(api.open === row) api.open = null;
+    }
+  };
+  list.addEventListener('touchend', end); list.addEventListener('touchcancel', end);
+  return api;
+})();
+
+async function confirmDeleteSession(id){
+  const s = S.sessions.find(x => x.id === id); if(!s) return;
+  const n = s.markers.length;
+  const ok = await ask({ title:'Delete this session?',
+    msg:`“${s.name}”${n ? ` and its ${n} marker${n>1?'s':''}` : ''} will be removed from this phone. Export it first if you still need it.`,
+    ok:'Delete session', danger:true });
+  if(!ok){ swipeRow.close(); return; }
+  const idx = S.sessions.indexOf(s);
+  S.sessions.splice(idx, 1); swipeRow.open = null;
+  if(S.currentId === id) S.currentId = null;
+  if(!S.sessions.some(x => x.status === 'rolling')) keepAwake(false);
+  saveSessions(); renderHome();
+  toast('Session deleted.', 'Undo', () => { S.sessions.splice(Math.min(idx, S.sessions.length), 0, s); saveSessions(); renderHome(); });
+}
+async function confirmDeleteFolder(id){
+  const f = folderById(id); if(!f) return;
+  const ss = sessionsIn(id);
+  const ok = await ask({ title:'Delete this folder?',
+    msg: ss.length ? `“${f.name}” will be removed. Its ${ss.length} session${ss.length>1?'s':''} move back to your main list, so no markers are lost.` : `“${f.name}” is empty and will be removed.`,
+    ok:'Delete folder', danger:true });
+  if(!ok){ swipeRow.close(); return; }
+  const idx = S.folders.indexOf(f);
+  S.folders.splice(idx, 1); ss.forEach(s => s.folderId = null);
+  if(S.folderId === id) S.folderId = null;
+  saveFolders(); saveSessions(); renderHome();
+  toast('Folder deleted.', 'Undo', () => { S.folders.splice(Math.min(idx, S.folders.length), 0, f); ss.forEach(s => s.folderId = id); saveFolders(); saveSessions(); renderHome(); });
+}
+async function createFolder(){
+  const n = S.folders.length + 1;
+  const name = await ask({ title:'Name this folder', msg:'Group the shoot days for one project.', value:`Project ${n}`, ok:'Create folder', input:true });
+  if(name == null || !name.trim()) return null;
+  const f = { id:uid(), name:name.trim(), created:Date.now() };
+  S.folders.push(f); saveFolders();
+  return f;
+}
+async function renameFolder(id){
+  const f = folderById(id); if(!f) return;
+  const v = await ask({ title:'Rename folder', value:f.name, ok:'Save name', input:true });
+  swipeRow.close();
+  if(v != null && v.trim()){ f.name = v.trim(); saveFolders(); renderHome(); }
+}
+// Move one or more sessions into a folder (or back to the main list).
+let moveIds = [];
+function moveSessions(ids){
+  moveIds = ids;
+  const cur = new Set(ids.map(id => (S.sessions.find(s=>s.id===id)||{}).folderId || null));
+  const here = cur.size === 1 ? [...cur][0] : undefined;
+  $('#moveH').textContent = ids.length > 1 ? `Move ${ids.length} sessions` : 'Move session';
+  $('#moveList').innerHTML =
+    `<button class="mrow" data-to="" ${here===null?'aria-current="true"':''}><svg><use href="#i-list"/></svg><span>Main list (no folder)</span></button>` +
+    [...S.folders].sort((a,b)=>b.created-a.created).map(f =>
+      `<button class="mrow" data-to="${f.id}" ${here===f.id?'aria-current="true"':''}><svg><use href="#i-folder"/></svg><span>${esc(f.name)}</span><small>${folderSpan(f)}</small></button>`).join('') +
+    `<button class="mrow new" data-to="__new"><svg><use href="#i-plus"/></svg><span>New folder…</span></button>`;
+  openSheet('move', () => swipeRow.close());
+}
+$('#moveList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-to]'); if(!b) return;
+  let to = b.dataset.to || null, f = null;
+  if(to === '__new'){ closeSheet(); await new Promise(r => setTimeout(r, 280)); f = await createFolder(); if(!f) return; to = f.id; }
+  else { f = to ? folderById(to) : null; closeSheet(); }
+  moveIds.forEach(id => { const s = S.sessions.find(x => x.id === id); if(s) s.folderId = to; });
+  saveSessions();
+  if(S.selectMode){ S.selectMode = false; S.selected.clear(); }
+  renderHome();
+  toast(`Moved to ${f ? f.name : 'the main list'}.`);
+});
+
+// Layout picker: used from Settings and when a new folder is created.
+let layCtx = null;
+function layoutRow(attr, name, bs, extra=''){
+  const names = bs.map(b => b.name).join(', ');
+  return `<div class="lrow"><button class="lpick" ${attr}><span class="lname">${esc(name)}</span><span class="lsub">${esc(names)}</span>
+    <span class="swatches">${bs.map(b=>`<i style="background:${b.color}"></i>`).join('')}</span></button>${extra}</div>`;
+}
+function openLayouts(ctx){
+  layCtx = ctx;
+  const bf = ctx.folder || buttonFolder();
+  $('#layH').textContent = ctx.after === 'folder' ? 'Buttons for this folder' : 'Load a layout';
+  $('#layHint').textContent = ctx.after === 'folder'
+    ? `Pick the marker buttons “${bf.name}” starts with. You can change them anytime in Settings.`
+    : `Replaces the buttons ${bf ? `in “${bf.name}”` : 'for sessions not in a folder'}. Markers you've already logged keep their names and colors.`;
+  const rows = [];
+  if(bf) rows.push(layoutRow('data-lay="main"', 'Same as the main list', S.settings.buttons));
+  S.layouts.forEach(l => rows.push(layoutRow(`data-lay="${l.id}"`, l.name, l.buttons,
+    `<button class="icon-btn ldel" data-ldel="${l.id}" aria-label="Delete layout ${esc(l.name)}"><svg><use href="#i-close"/></svg></button>`)));
+  rows.push(layoutRow('data-lay="defaults"', 'Defaults', defaultButtons()));
+  $('#layList').innerHTML = rows.join('') + (S.layouts.length ? '' : `<p class="hint">No saved layouts yet. Set up buttons in Settings, then tap Save layout to reuse them in other folders.</p>`);
+  openSheet('layouts', () => {
+    const c = layCtx; layCtx = null;
+    if(c && c.after === 'folder' && !c.done){ c.folder.buttons = copyButtons(S.settings.buttons); saveFolders(); openFolder(c.folder.id); }
+  });
+}
+$('#layList').addEventListener('click', async e => {
+  const del = e.target.closest('[data-ldel]');
+  if(del){
+    const l = S.layouts.find(x => x.id === del.dataset.ldel); if(!l) return;
+    const ctx = layCtx; ctx.done = true;
+    const ok = await ask({ title:'Delete this layout?', msg:`“${l.name}” will be removed from your saved layouts. Folders already using it keep their buttons.`, ok:'Delete layout', danger:true });
+    if(ok){ S.layouts = S.layouts.filter(x => x !== l); saveLayouts(); }
+    ctx.done = false; openLayouts(ctx); return;
+  }
+  const p = e.target.closest('[data-lay]'); if(!p || !layCtx) return;
+  const id = p.dataset.lay, ctx = layCtx; ctx.done = true;
+  const src = id === 'main' ? S.settings.buttons : id === 'defaults' ? defaultButtons() : (S.layouts.find(l => l.id === id) || {}).buttons;
+  const label = id === 'main' ? 'the main list' : id === 'defaults' ? 'the defaults' : `“${(S.layouts.find(l => l.id === id)||{}).name}”`;
+  if(!src) return;
+  closeSheet();
+  if(ctx.after === 'folder'){ ctx.folder.buttons = copyButtons(src); saveFolders(); openFolder(ctx.folder.id); toast(`“${ctx.folder.name}” is using ${label}.`); }
+  else setTimeout(() => { openSettings(); applyLayout(src, label); renderSettings(); }, 300);
+});
+$('#newFolder').onclick = async () => {
+  const f = await createFolder(); if(!f) return;
+  S.folderId = f.id;  // so the picker and later edits target the new folder
+  await new Promise(r => setTimeout(r, 280));
+  openLayouts({ after:'folder', folder:f });
+};
+$('#folderBack').onclick = () => { swipeRow.close(); S.folderId = null; S.selectMode = false; S.selected.clear(); renderHome(); window.scrollTo(0,0); };
+$('#folderTitle').onclick = () => renameFolder(S.folderId);
+$('#folderExport').onclick = () => {
+  const f = folderById(S.folderId), ids = sessionsIn(S.folderId).map(s => s.id);
+  if(!ids.length){ toast('This folder has no sessions to export yet.'); return; }
+  openExport(ids, f && f.name);
+};
+$('#selToggle').onclick = () => { swipeRow.close(); S.selectMode = !S.selectMode; S.selected.clear(); renderHome(); };
+$('#selDelete').onclick = async () => {
+  const n = S.selected.size;
+  if(!await ask({title:`Delete ${n} session${n>1?'s':''}?`, msg:'Their markers are removed from this phone. Export first if you need them.', ok:'Delete', danger:true})) return;
+  S.sessions = S.sessions.filter(s => !S.selected.has(s.id)); S.selected.clear(); S.selectMode = false;
+  saveSessions(); renderHome();
+};
+$('#selMove').onclick = () => moveSessions([...S.selected]);
+$('#selExport').onclick = () => openExport([...S.selected], S.folderId && folderById(S.folderId) ? folderById(S.folderId).name : null);
+$('#newSession').onclick = async () => {
+  const name = await ask({title:'Name this session', value:newSessionName(), ok:'Create session', input:true});
+  if(name == null) return;
+  const live = S.sessions.find(x => x.status === 'rolling');
+  if(live){
+    if(!await ask({title:`End “${live.name}” first?`, msg:'Only one session can be live at a time. Its markers stay saved and ready to export.', ok:'End it and start new'})) return;
+    endSession(live, epochNow());
+  }
+  const t = epochNow();
+  const s = { id:uid(), name: name.trim() || newSessionName(), created: Date.now(), rateId:S.sync.rateId, status:'rolling',
+    folderId: S.folderId || null,
+    rolls:[{ start: Math.floor(framesAt(t)), startEpoch: t, end: null }], markers:[] };
+  S.sessions.push(s); saveSessions(); S.currentId = s.id; keepAwake(true); show('rec');
+};
+
+function renderRec(){
+  const s = cur(); if(!s){ show('home'); return; }
+  $('#recTitle').textContent = s.name;
+  const rolling = s.status === 'rolling';
+  $('#monitor').classList.toggle('rolling', rolling);
+  const ended = isEnded(s);
+  $('#stateLbl').textContent = rolling ? 'Live' : ended ? 'Ended' : 'Not started';
+  $('#rollBtn').classList.toggle('stop', rolling);
+  $('#rollBtn').classList.toggle('hidden', ended);
+  $('#rollLbl').textContent = rolling ? 'End session' : 'Start session';
+  const r = rateById(s.rateId || S.sync.rateId);
+  $('#recRate').textContent = r.label + ' fps';
+  // grid
+  const counts = {};
+  s.markers.forEach(m => { if(m.bid) counts[m.bid] = (counts[m.bid]||0)+1; });
+  $('#markGrid').innerHTML = activeButtons().map((b,i) =>
+    `<button class="mk ${rolling?'':'off'}" data-b="${i}" style="background:${b.color};color:${inkFor(b.color)}"><span class="n">${counts[b.id]||''}</span>${esc(b.name||'Marker')}</button>`).join('');
+  // log
+  const ms = sortedMarkers(s), sr = rateById(s.rateId || S.sync.rateId);
+  $('#logCount').textContent = ms.length ? `${ms.length} total` : '';
+  $('#markLog').innerHTML = ms.length ? ms.map((m,i)=>`<li><button data-mid="${m.id}">
+      <span class="num">${i+1}</span><span class="tc">${framesToTC(m.frames, sr)}</span>
+      <span class="nm"><i style="background:${m.color}"></i><span>${esc(m.name)}</span></span>
+      ${m.note?`<span class="note">${esc(m.note)}</span>`:''}</button></li>`).reverse().join('')
+    : `<li class="log-empty">${rolling ? 'Tap a button to drop a marker at the current timecode.' : ended ? 'This session ended with no markers.' : 'Start the session, then tap a button to drop a marker.'}</li>`;
+  $('#afterStop').classList.toggle('hidden', !(ended && ms.length));
+  // ticks
+  const base = clockRate().base;
+  if($('#ticks').childElementCount !== base) $('#ticks').innerHTML = '<i></i>'.repeat(base);
+  lastF = null;
+}
+
+// ================= Roll / markers =================
+let wakeLock = null;
+async function keepAwake(on){
+  try{
+    if(on && 'wakeLock' in navigator && !wakeLock){ wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', ()=> wakeLock = null); }
+    if(!on && wakeLock){ await wakeLock.release(); wakeLock = null; }
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible' && S.sessions.some(s=>s.status==='rolling')) keepAwake(true); });
+
+function endSession(s, t){
+  const last = s.rolls[s.rolls.length-1];
+  if(last && last.end == null){ last.end = Math.floor(framesAt(t)); last.endEpoch = t; }
+  s.status = 'ended'; s.ended = Date.now();
+  saveSessions();
+  if(!S.sessions.some(x => x.status === 'rolling')) keepAwake(false);
+}
+$('#rollBtn').addEventListener('click', async e => {
+  const s = cur(), t = evEpoch(e);
+  if(s.status === 'rolling'){
+    const n = s.markers.length;
+    const ok = await ask({ title:'Are you sure you want to end this session?',
+      msg: n ? `${n} marker${n>1?'s':''} will be saved and ready to export. You can't add markers after the session ends.` : "This session has no markers yet. You can't add markers after it ends.",
+      ok:'End session', danger:true });
+    if(!ok) return;
+    endSession(s, t); renderRec();
+    if(n) setTimeout(() => openExport([s.id]), 380); else toast('Session ended.');
+    return;
+  }
+  if(isEnded(s)) return;
+  if(s.rateId && s.rateId !== S.sync.rateId && s.markers.length){
+    await ask({title:'Frame rate changed', msg:`This session was logged at ${rateById(s.rateId).label}. The clock is now ${clockRate().label}. Re-sync at ${rateById(s.rateId).label} or start a new session.`, ok:'OK', noCancel:true});
+    return;
+  }
+  s.rateId = S.sync.rateId;
+  s.rolls.push({ start: Math.floor(framesAt(t)), startEpoch: t, end: null });
+  s.status = 'rolling'; keepAwake(true);
+  saveSessions(); renderRec();
+});
+
+// Timing comes from the moment the finger lands; the marker commits on lift so scrolling never drops one.
+let press = null;
+$('#markGrid').addEventListener('pointerdown', e => {
+  const btn = e.target.closest('.mk'); if(!btn) return;
+  press = { t: evEpoch(e), x: e.clientX, y: e.clientY, b: +btn.dataset.b, id: e.pointerId };
+});
+$('#markGrid').addEventListener('pointercancel', () => press = null);
+$('#markGrid').addEventListener('pointerup', e => {
+  const pr = press; press = null;
+  if(!pr || pr.id !== e.pointerId || Math.hypot(e.clientX - pr.x, e.clientY - pr.y) > 14) return;
+  addMarker(pr.b, pr.t);
+});
+$('#markGrid').addEventListener('keydown', e => {
+  const btn = e.target.closest('.mk');
+  if(btn && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); addMarker(+btn.dataset.b, evEpoch(e)); }
+});
+function addMarker(bi, t){
+  const s = cur();
+  if(s.status !== 'rolling'){ toast(isEnded(s) ? 'This session has ended. Start a new session to log more markers.' : 'Start the session first.'); return; }
+  if(s.rateId && s.rateId !== S.sync.rateId){ toast(`The clock is at ${clockRate().label} but this session is ${rateById(s.rateId).label}. Re-sync at ${rateById(s.rateId).label}.`); return; }
+  const b = activeButtons()[bi]; if(!b) return;
+  const m = { id:uid(), frames: Math.floor(framesAt(t)), name: b.name || 'Marker', color: b.color, bid:b.id, note:'' };
+  s.markers.push(m); saveSessions();
+  if(navigator.vibrate) navigator.vibrate(12);
+  renderRec();
+  const nb = $(`.mk[data-b="${bi}"]`); nb.classList.add('flash'); setTimeout(()=>nb.classList.remove('flash'), 360);
+  const idx = sortedMarkers(s).indexOf(m) + 1;
+  toast(`${idx}. ${m.name} at ${framesToTC(m.frames, rateById(s.rateId))}`, 'Undo', () => {
+    s.markers = s.markers.filter(x => x.id !== m.id); saveSessions(); renderRec();
+  });
+}
+
+$('#markLog').addEventListener('click', e => { const b = e.target.closest('[data-mid]'); if(b) openMarker(b.dataset.mid); });
+$('#recBack').onclick = () => { const s = cur(); S.folderId = s && s.folderId && folderById(s.folderId) ? s.folderId : null; show('home'); };
+$('#recTitle').onclick = async () => {
+  const s = cur(); const v = await ask({title:'Rename session', value:s.name, ok:'Save name', input:true});
+  if(v != null && v.trim()){ s.name = v.trim(); saveSessions(); renderRec(); }
+};
+$('#recExport').onclick = $('#exportBig').onclick = () => openExport([S.currentId]);
+
+// ================= Marker editor =================
+let editing = null, editColor = null;
+function openMarker(id){
+  const s = cur(), m = s.markers.find(x => x.id === id); if(!m) return;
+  editing = m; editColor = m.color;
+  const r = rateById(s.rateId);
+  $('#mkName').value = m.name; $('#mkNote').value = m.note || ''; $('#mkTC').value = framesToTC(m.frames, r);
+  const palette = [...new Set([m.color, ...activeButtons().map(b=>b.color)])];
+  const draw = () => $('#mkColors').innerHTML = palette.map(c=>`<button data-c="${c}" style="background:${c}" aria-pressed="${c===editColor}" aria-label="Color ${nearestResolve(c)}"></button>`).join('');
+  draw();
+  $('#mkColors').onclick = e => { const b = e.target.closest('[data-c]'); if(b){ editColor = b.dataset.c; draw(); } };
+  openSheet('marker');
+}
+attachTCFormat($('#mkTC'));
+$('#mkSave').onclick = () => {
+  const s = cur(), r = rateById(s.rateId), f = parseTC($('#mkTC').value, r);
+  if(f == null){ toast(`Timecode isn't valid at ${r.label}.`); return; }
+  Object.assign(editing, { name: $('#mkName').value.trim() || 'Marker', note: $('#mkNote').value.trim(), frames: f, color: editColor });
+  saveSessions(); closeSheet(); renderRec();
+};
+$('#mkDelete').onclick = () => {
+  const s = cur(), m = editing; s.markers = s.markers.filter(x => x !== m); saveSessions(); closeSheet(); renderRec();
+  toast('Marker deleted.', 'Undo', () => { s.markers.push(m); saveSessions(); renderRec(); });
+};
+
+// ================= Sheets / dialogs / toast =================
+let openId = null, onSheetClose = null;
+const COARSE = matchMedia('(pointer: coarse)').matches;
+// Tapping a name field selects the whole name so it can be typed over.
+$('#prInput').addEventListener('focus', e => {
+  const el = e.target; requestAnimationFrame(() => { try{ el.setSelectionRange(0, el.value.length); }catch(_){} });
+});
+// Keep open sheets pinned just above the on-screen keyboard instead of letting Safari shove the page around.
+function placeSheets(){
+  const vv = window.visualViewport; if(!vv) return;
+  const kb = Math.max(0, Math.round(window.innerHeight - (vv.offsetTop + vv.height)));
+  document.documentElement.style.setProperty('--kb', kb + 'px');
+  document.documentElement.style.setProperty('--vvh', Math.round(vv.height) + 'px');
+}
+if(window.visualViewport){ visualViewport.addEventListener('resize', placeSheets); visualViewport.addEventListener('scroll', placeSheets); placeSheets(); }
+// Swipe a sheet down to close it. Starts from the handle or title bar anywhere,
+// or from the body when the sheet is already scrolled to the top.
+(function sheetSwipe(){
+  const phone = matchMedia('(max-width: 699px)');
+  let d = null;
+  document.addEventListener('touchstart', e => {
+    if(!phone.matches || !openId || e.touches.length !== 1) return;
+    const sh = $('#sheet-'+openId); if(!sh.contains(e.target)) return;
+    if(e.target.closest('input, textarea, select, [data-nodrag]')) return;
+    const fromTop = !!e.target.closest('.grab, .sheet-head');
+    if(!fromTop && sh.scrollTop > 0) return;
+    const t = e.touches[0];
+    d = { sh, x:t.clientX, y:t.clientY, t:performance.now(), dy:0, on:false, fromTop };
+  }, { passive:true });
+  document.addEventListener('touchmove', e => {
+    if(!d) return;
+    const t = e.touches[0], dx = t.clientX - d.x, dy = t.clientY - d.y;
+    if(!d.on){
+      if(Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) { d = null; return; }   // sideways, e.g. the tab bar
+      if(dy < -6 && !d.fromTop) { d = null; return; }                              // scrolling the sheet up
+      if(dy < 8) return;
+      if(!d.fromTop && d.sh.scrollTop > 0) { d = null; return; }
+      d.on = true; d.sh.classList.add('dragging'); $('#scrim').style.transition = 'none';
+    }
+    e.preventDefault();
+    d.dy = Math.max(0, dy);
+    d.sh.style.transform = `translateY(${d.dy}px)`;
+    $('#scrim').style.opacity = String(Math.max(0.15, 1 - d.dy / (d.sh.offsetHeight || 600)));
+  }, { passive:false });
+  const end = () => {
+    if(!d) return;
+    const { sh, on, dy, t } = d; d = null;
+    if(!on) return;
+    const v = dy / Math.max(1, performance.now() - t);
+    sh.classList.remove('dragging'); $('#scrim').style.transition = ''; $('#scrim').style.opacity = '';
+    if(dy > Math.min(140, sh.offsetHeight * 0.3) || (v > 0.6 && dy > 40)){
+      sh.style.transform = 'translateY(100%)';
+      closeSheet();
+      setTimeout(() => { sh.style.transform = ''; }, 300);
+    } else sh.style.transform = '';
+  };
+  document.addEventListener('touchend', end); document.addEventListener('touchcancel', end);
+})();
+function openSheet(id, onClose){
+  if(openId) closeSheet(true);
+  openId = id; onSheetClose = onClose || null;
+  document.documentElement.classList.add('sheet-open');
+  $('#toast').classList.remove('show'); clearTimeout(toastTimer);
+  const sh = $('#sheet-'+id), sc = $('#scrim');
+  sh.classList.remove('hidden'); sc.classList.remove('hidden');
+  requestAnimationFrame(()=>{ sh.classList.add('show'); sc.classList.add('show'); });
+}
+function closeSheet(instant){
+  if(!openId) return;
+  const closingId = openId, sh = $('#sheet-'+openId), sc = $('#scrim'), fn = onSheetClose;
+  openId = null; onSheetClose = null;
+  document.documentElement.classList.remove('sheet-open');
+  if(document.activeElement && sh.contains(document.activeElement)) document.activeElement.blur();
+  sh.classList.remove('show'); sc.classList.remove('show');
+  // If the same sheet was reopened right away (one prompt followed by another), leave it showing.
+  const done = () => { if(openId !== closingId) sh.classList.add('hidden'); if(!openId) sc.classList.add('hidden'); };
+  instant ? done() : setTimeout(done, 260);
+  if(fn) fn();
+}
+$('#scrim').onclick = () => { if(openId !== 'prompt') closeSheet(); };
+document.addEventListener('click', e => {
+  if(e.target.closest('[data-close]')) closeSheet();
+  const o = e.target.closest('[data-open]');
+  if(o){ o.dataset.open === 'sync' ? openSync() : openSettings(); }
+});
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && openId && openId !== 'prompt') closeSheet(); });
+
+function ask({title, msg, value='', ok='OK', input=false, danger=false, noCancel=false}){
+  return new Promise(res => {
+    $('#prH').textContent = title;
+    $('#prMsg').textContent = msg || ''; $('#prMsg').classList.toggle('hidden', !msg);
+    $('#prField').classList.toggle('hidden', !input);
+    $('#prInput').value = value;
+    $('#prOk').textContent = ok; $('#prOk').classList.toggle('danger', danger); $('#prOk').classList.toggle('primary', !danger);
+    $('#prCancel').classList.toggle('hidden', noCancel);
+    let settled = false;
+    const finish = v => { if(settled) return; settled = true; closeSheet(); res(v); };
+    $('#prOk').onclick = () => finish(input ? $('#prInput').value : true);
+    $('#prCancel').onclick = () => finish(input ? null : false);
+    $('#prInput').onkeydown = e => { if(e.key === 'Enter') $('#prOk').click(); };
+    openSheet('prompt', () => { if(!settled){ settled = true; res(input ? null : false); } });
+    // On phones, let the user's own tap open the keyboard. Focusing from code while the sheet
+    // is still sliding in is what made iOS drop the caret in the wrong place and jump the sheet.
+    if(input && !COARSE) setTimeout(()=>{ $('#prInput').focus(); $('#prInput').select(); }, 280);
+  });
+}
+let toastTimer;
+function toast(msg, act, fn){
+  $('#toastMsg').textContent = msg;
+  const a = $('#toastAct'); a.classList.toggle('hidden', !act); a.textContent = act || '';
+  a.onclick = () => { $('#toast').classList.remove('show'); fn && fn(); };
+  $('#toast').classList.add('show'); clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>$('#toast').classList.remove('show'), act ? 4200 : 2600);
+}
+
+// ================= Timecode input formatting =================
+function attachTCFormat(input){
+  input.addEventListener('input', () => {
+    const d = input.value.replace(/\D/g,'').slice(-8);
+    input.value = d.replace(/(\d{2})(?=\d)/g, '$1:');
+  });
+}
+
+// ================= Frame rate =================
+const RATE_GROUPS = [
+  ['Film', ['23.976','24','48']],
+  ['NTSC video', ['29.97','29.97df','59.94','59.94df']],
+  ['PAL video', ['25','50']],
+  ['Integer', ['30','60']],
+];
+const RATE_NAMES = { '23.976':'23.976 (23.98)', '24':'24', '48':'48', '29.97':'29.97 non-drop', '29.97df':'29.97 drop frame',
+  '59.94':'59.94 non-drop', '59.94df':'59.94 drop frame', '25':'25', '50':'50', '30':'30', '60':'60' };
+function rateOptions(sel){
+  return RATE_GROUPS.map(([g,ids]) => `<optgroup label="${g}">${ids.map(id => `<option value="${id}" ${id===sel?'selected':''}>${RATE_NAMES[id]} fps${id==='23.976'?' (default)':''}</option>`).join('')}</optgroup>`).join('');
+}
+function setClockRate(id){
+  if(id === S.sync.rateId) return true;
+  const live = S.sessions.find(s => s.status === 'rolling');
+  if(live && live.markers.length && live.rateId !== id){
+    toast(`End “${live.name}” first. Its markers were logged at ${rateById(live.rateId).label}.`);
+    return false;
+  }
+  const r = rateById(id), now = epochNow();
+  if(S.sync.source === 'tod') S.sync = todAnchor(id);
+  else {
+    // Keep the same hours, minutes and seconds; rescale the frame count to the new rate.
+    const old = clockRate(), p = framesToParts(Math.floor(framesAt(now) - S.settings.offset), old);
+    let fr = Math.min(r.base - 1, Math.floor(p.f * r.base / old.base));
+    if(r.df){ const drop = r.base === 30 ? 2 : 4; if(p.s === 0 && p.m % 10 !== 0 && fr < drop) fr = drop; }
+    S.sync = { ...S.sync, frames: partsToFrames(p.h, p.m, p.s, fr, r), epoch: now, rateId: id };
+  }
+  if(live) live.rateId = id;
+  saveSync(); saveSessions(); renderPills(); lastF = null;
+  if(S.view === 'rec') renderRec();
+  if($('#ticks').childElementCount !== r.base) $('#ticks').innerHTML = '<i></i>'.repeat(r.base);
+  requestAnimationFrame(fitReadout);
+  return true;
+}
+
+// ================= Settings =================
+function applyTheme(){
+  document.documentElement.dataset.theme = S.settings.theme;
+  document.querySelector('meta[name="theme-color"]').content = S.settings.theme === 'dark' ? '#14191f' : '#e4e8ec';
+  $$('#themeSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeSet === S.settings.theme));
+}
+function renderSettings(){
+  applyTheme();
+  renderOffline();
+  $('#setRate').innerHTML = rateOptions(S.sync.rateId);
+  const BS = activeButtons();
+  const active = LOOKS.find(l => BS.every((b,i)=>b.color.toLowerCase() === l.colors[i % l.colors.length].toLowerCase()));
+  $('#looks').innerHTML = LOOKS.map(l => `<button class="look" data-look="${l.id}" aria-pressed="${active && active.id===l.id}"><b>${l.name}</b><span class="sw">${l.colors.map(c=>`<i style="background:${c}"></i>`).join('')}</span></button>`).join('');
+  const bf = buttonFolder();
+  $('#btnFor').textContent = bf ? `These buttons are saved with the “${bf.name}” folder. Sessions outside it keep their own.` : 'These buttons are used for sessions that aren’t in a folder. Each folder can have its own.';
+  $('#bedits').innerHTML = BS.map((b,i)=>`<div class="bedit">
+      <label class="colorwell" aria-label="Color for button ${i+1}"><i style="background:${b.color}"></i><input type="color" data-ci="${i}" value="${b.color}"></label>
+      <input class="input" data-ni="${i}" value="${esc(b.name)}" maxlength="40" placeholder="Button ${i+1}">
+      <button class="icon-btn rm" data-rm="${i}" aria-label="Remove ${esc(b.name || 'button '+(i+1))}" ${BS.length<=1?'disabled':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <span class="meta2" data-ri="${i}">Exports as Resolve ${nearestResolve(b.color)}</span></div>`).join('');
+  const n = BS.length;
+  $('#addButton').textContent = n >= MAX_BUTTONS ? `${MAX_BUTTONS} of ${MAX_BUTTONS} buttons` : `Add button (${n} of ${MAX_BUTTONS})`;
+  $('#addButton').disabled = n >= MAX_BUTTONS;
+}
+function openSettings(){ renderSettings(); openSheet('settings', () => { if(S.view==='rec') renderRec(); }); }
+$('#setRate').onchange = e => {
+  if(setClockRate(e.target.value)) toast(`Frame rate set to ${RATE_NAMES[e.target.value]} fps.`);
+  else e.target.value = S.sync.rateId;
+};
+$('#themeSeg').onclick = e => { const b = e.target.closest('[data-theme-set]'); if(!b) return; S.settings.theme = b.dataset.themeSet; applyTheme(); saveSettings(); };
+$('#looks').onclick = e => {
+  const b = e.target.closest('[data-look]'); if(!b) return;
+  const l = LOOKS.find(x => x.id === b.dataset.look);
+  activeButtons().forEach((bt,i) => bt.color = l.colors[i % l.colors.length]); setActiveButtons(activeButtons(), l.id);
+  saveButtons(); renderSettings();
+};
+$('#bedits').addEventListener('input', e => {
+  const t = e.target;
+  if(t.dataset.ci != null){
+    const i = +t.dataset.ci; activeButtons()[i].color = t.value;
+    t.previousElementSibling.style.background = t.value;
+    $(`[data-ri="${i}"]`).textContent = 'Exports as Resolve ' + nearestResolve(t.value);
+    $$('#looks .look').forEach(x => x.setAttribute('aria-pressed','false'));
+  }
+  if(t.dataset.ni != null) activeButtons()[+t.dataset.ni].name = t.value;
+  clearTimeout(t._sv); t._sv = setTimeout(saveButtons, 300);
+});
+$('#resetButtons').onclick = () => { applyLayout(defaultButtons(), 'the defaults'); renderSettings(); };
+$('#saveLayout').onclick = async () => {
+  const bf = buttonFolder();
+  const name = await ask({ title:'Save layout', msg:'Saved layouts can be loaded into any folder or the main list.', value: bf ? `${bf.name} buttons` : `Layout ${S.layouts.length+1}`, ok:'Save layout', input:true });
+  if(name == null || !name.trim()){ openSettings(); return; }
+  S.layouts.push({ id:uid(), name:name.trim(), created:Date.now(), buttons: activeButtons().map(b => ({ name:b.name, color:b.color })) });
+  saveLayouts(); openSettings(); toast(`Saved “${name.trim()}”.`);
+};
+$('#loadLayout').onclick = () => openLayouts({ after:'settings' });
+$('#bedits').addEventListener('click', e => {
+  const b = e.target.closest('[data-rm]'); if(!b || activeButtons().length <= 1) return;
+  activeButtons().splice(+b.dataset.rm, 1); saveButtons(); renderSettings();
+});
+$('#addButton').onclick = () => {
+  const bs = activeButtons(); if(bs.length >= MAX_BUTTONS) return;
+  const look = LOOKS.find(l => l.id === activeLook()) || LOOKS[0];
+  const used = new Set(bs.map(b => b.color.toLowerCase()));
+  const color = look.colors.find(c => !used.has(c.toLowerCase())) || Object.values(RESOLVE_COLORS).find(c => !used.has(c.toLowerCase())) || look.colors[0];
+  const names = new Set(bs.map(b => b.name));
+  const name = DEFAULT_NAMES.find(nm => !names.has(nm)) || `Marker ${bs.length+1}`;
+  bs.push({ id:uid(), name, color }); saveButtons(); renderSettings();
+  const inp = $(`[data-ni="${bs.length-1}"]`); if(inp){ inp.focus(); inp.select(); }
+};
+
+// ================= Sync sheet =================
+let syncTab = 'cam';
+function sheetRate(){ return rateById($('#syncRate').value); }
+function openSync(){
+  $('#syncRate').innerHTML = rateOptions(S.sync.rateId);
+  renderOffset(); setTab(syncTab);
+  openSheet('sync', stopSyncInputs);
+}
+function setTab(t){
+  stopSyncInputs(); syncTab = t;
+  $$('#syncTabs button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === t));
+  $$('[data-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== t));
+  if(t === 'man'){
+    const r = sheetRate(), base = S.sync.rateId === r.id ? Math.floor(framesNow()) : todAnchor(r.id).frames;
+    const p = framesToParts(base + r.base*10, r);
+    $('#manTC').value = `${p2(p.h)}:${p2(p.m)}:${p2(p.s)}:00`;
+  }
+  resetCamUI(); resetLtcUI();
+}
+$('#syncTabs').onclick = e => { const b = e.target.closest('[data-tab]'); if(b) setTab(b.dataset.tab); };
+$('#syncRate').onchange = () => setTab(syncTab);
+function renderOffset(){ const o = S.settings.offset; $('#offOut').textContent = `${o>0?'+':''}${o} frame${Math.abs(o)===1?'':'s'}`; }
+$('#offMinus').onclick = () => { S.settings.offset--; renderOffset(); saveSettings(); };
+$('#offPlus').onclick = () => { S.settings.offset++; renderOffset(); saveSettings(); };
+
+function applySync(frames, epoch, source){
+  const r = sheetRate();
+  S.sync = { frames, epoch, rateId: r.id, source, at: epochNow() };
+  saveSync(); closeSheet(); renderPills(); if(S.view === 'rec') renderRec();
+  lastF = null;
+  toast(`Synced to ${SRC_LABEL[source].toLowerCase()} at ${framesToTC(Math.floor(framesNow()), r)}`);
+}
+function stopSyncInputs(){ stopCam(); stopLtc(); }
+
+// --- Manual ---
+attachTCFormat($('#manTC'));
+$('#manTap').addEventListener('pointerdown', e => {
+  const t = evEpoch(e), r = sheetRate(), f = parseTC($('#manTC').value, r);
+  if(f == null){ toast(`Enter a full timecode, valid at ${r.label}.`); return; }
+  applySync(f, t, 'man');
+});
+// --- Time of day ---
+$('#todUse').onclick = () => { const a = todAnchor(sheetRate().id); applySync(a.frames, a.epoch, 'tod'); };
+
+// --- Camera OCR ---
+const cam = { stream:null, scanning:false, cands:[], lock:null, worker:null, workerP:null };
+function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load '+src)); document.head.appendChild(s); }); }
+async function getWorker(){
+  if(cam.worker) return cam.worker;
+  if(!cam.workerP) cam.workerP = (async () => {
+    // The text reader ships with the app (vendor/) so camera sync works with no connection.
+    // If those files aren't there (e.g. the single-file preview), fall back to the public CDN.
+    const abs = p => new URL(p, location.href).href;
+    let w = null;
+    try{
+      if(!window.Tesseract) await loadScript('vendor/tesseract/tesseract.min.js');
+      w = await Tesseract.createWorker('eng', 1, { workerPath: abs('vendor/tesseract/worker.min.js'), corePath: abs('vendor/tesseract-core'),
+        langPath: abs('vendor/lang'), workerBlobURL: false, gzip: true });
+    }catch(e){
+      console.warn('Local text reader unavailable, trying CDN', e);
+      if(!window.Tesseract) await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
+      w = await Tesseract.createWorker('eng', 1);
+    }
+    await w.setParameters({ tessedit_char_whitelist:'0123456789:;.', tessedit_pageseg_mode:'7' });
+    cam.worker = w; return w;
+  })().catch(e => { cam.workerP = null; throw e; });
+  return cam.workerP;
+}
+// Highlights the next step: scan first, then "Use this sync".
+function syncStep(startSel, useSel, step){
+  const st = $(startSel), us = $(useSel);
+  st.classList.toggle('go', step === 'start'); st.classList.toggle('quiet', step !== 'start');
+  us.classList.toggle('go', step === 'use');   us.classList.toggle('quiet', step !== 'use');
+  if(step !== 'use') us.classList.remove('ready');
+}
+function resetCamUI(){
+  $('#camTC').textContent = '--:--:--:--'; $('#camSt').textContent = 'Not scanning';
+  $('#camRead').classList.remove('locked'); $('#camGuide').classList.remove('locked');
+  $('#camUse').disabled = true; $('#camStart').textContent = 'Start scanning'; syncStep('#camStart','#camUse','start');
+  $('#camMsg').textContent = "Fit the camera's timecode inside the box";
+}
+function stopCam(){
+  cam.scanning = false;
+  if(cam.stream){ cam.stream.getTracks().forEach(t=>t.stop()); cam.stream = null; $('#camVideo').srcObject = null; }
+  $('#zoomRow').classList.add('hidden');
+}
+$('#camStart').onclick = async () => {
+  if(cam.scanning){ cam.scanning = false; $('#camStart').textContent = 'Start scanning'; $('#camSt').textContent = 'Paused'; syncStep('#camStart','#camUse','start'); return; }
+  cam.cands = []; cam.lock = null; $('#camUse').disabled = true; $('#camUse').classList.remove('ready');
+  $('#camRead').classList.remove('locked'); $('#camGuide').classList.remove('locked');
+  try{
+    if(!cam.stream){
+      cam.stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080} }, audio:false });
+      const v = $('#camVideo'); v.srcObject = cam.stream; await v.play().catch(()=>{});
+      const track = cam.stream.getVideoTracks()[0], caps = track.getCapabilities ? track.getCapabilities() : {};
+      if(caps.zoom){ const z = $('#zoom'); z.min = caps.zoom.min; z.max = Math.min(caps.zoom.max, 10); z.step = caps.zoom.step || 0.1; z.value = track.getSettings().zoom || caps.zoom.min; $('#zoomRow').classList.remove('hidden');
+        z.oninput = () => track.applyConstraints({ advanced:[{ zoom:+z.value }] }).catch(()=>{}); }
+    }
+  }catch(e){
+    $('#camSt').textContent = 'Camera blocked'; $('#camMsg').textContent = 'Allow camera access in Safari settings, or use Manual sync.'; syncStep('#camStart','#camUse','start'); return;
+  }
+  cam.scanning = true; $('#camStart').textContent = 'Pause scanning'; syncStep('#camStart','#camUse','use');
+  $('#camSt').textContent = 'Loading text reader…';
+  let w; try{ w = await getWorker(); }catch(e){ $('#camSt').textContent = "Text reader didn't load"; $('#camMsg').textContent = 'Check the connection, or use Manual sync.'; cam.scanning=false; $('#camStart').textContent='Start scanning'; syncStep('#camStart','#camUse','start'); return; }
+  $('#camSt').textContent = 'Reading…';
+  while(cam.scanning){
+    const t0 = epochNow(), canvas = grabCrop();
+    if(!canvas){ await new Promise(r=>setTimeout(r,120)); continue; }
+    let text = '';
+    try{ text = (await w.recognize(canvas)).data.text; }catch(e){}
+    if(!cam.scanning) break;
+    handleCamRead(text, t0);
+  }
+};
+function grabCrop(){
+  const v = $('#camVideo'); if(!v.videoWidth) return null;
+  const vr = v.getBoundingClientRect(), gr = $('#camGuide').getBoundingClientRect();
+  const sc = Math.max(vr.width / v.videoWidth, vr.height / v.videoHeight);
+  const ox = (vr.width - v.videoWidth*sc)/2, oy = (vr.height - v.videoHeight*sc)/2;
+  const sx = (gr.left - vr.left - ox)/sc, sy = (gr.top - vr.top - oy)/sc, sw = gr.width/sc, sh = gr.height/sc;
+  const H = 110, W = Math.round(sw/sh*H), pad = 16;
+  const c = document.createElement('canvas'); c.width = W + pad*2; c.height = H + pad*2;
+  const x = c.getContext('2d', { willReadFrequently:true });
+  x.fillStyle = '#fff'; x.fillRect(0,0,c.width,c.height);
+  x.drawImage(v, sx, sy, sw, sh, pad, pad, W, H);
+  const img = x.getImageData(pad, pad, W, H), d = img.data, n = W*H, g = new Uint8Array(n), hist = new Uint32Array(256);
+  for(let i=0;i<n;i++){ const y = (d[i*4]*0.299 + d[i*4+1]*0.587 + d[i*4+2]*0.114)|0; g[i]=y; hist[y]++; }
+  // Otsu threshold
+  let sum=0; for(let i=0;i<256;i++) sum += i*hist[i];
+  let sB=0, wB=0, best=0, th=127;
+  for(let i=0;i<256;i++){ wB+=hist[i]; if(!wB) continue; const wF=n-wB; if(!wF) break; sB+=i*hist[i]; const mB=sB/wB, mF=(sum-sB)/wF, v2=wB*wF*(mB-mF)**2; if(v2>best){best=v2;th=i;} }
+  let bright=0; for(let i=0;i<n;i++) if(g[i]>th) bright++;
+  const invert = bright < n/2; // light digits on a dark screen
+  for(let i=0;i<n;i++){ let on = g[i] > th; if(invert) on = !on; const val = on ? 255 : 0; d[i*4]=d[i*4+1]=d[i*4+2]=val; d[i*4+3]=255; }
+  x.putImageData(img, pad, pad);
+  return c;
+}
+function parseLoose(text, r){
+  const m = text.match(/(\d{2})\s*[:;.,]\s*(\d{2})\s*[:;.,]\s*(\d{2})\s*[:;.,]\s*(\d{2})/);
+  if(m){ const f = parseTC(m.slice(1).join(''), r); if(f != null) return f; }
+  return parseTC(text, r);
+}
+function handleCamRead(text, t0){
+  const r = sheetRate(), f = parseLoose(text, r), fps = realFps(r);
+  if(f == null){ $('#camSt').textContent = 'No timecode found'; return; }
+  cam.cands.push({ frames:f, epoch:t0 }); if(cam.cands.length > 5) cam.cands.shift();
+  const last = cam.cands[cam.cands.length-1];
+  const norm = cam.cands.map(c => c.frames + (last.epoch - c.epoch)/1000*fps);
+  const agree = norm.filter(v => Math.abs(v - norm[norm.length-1]) <= 3);
+  $('#camTC').textContent = framesToTC(f, r);
+  if(agree.length >= 3){
+    const avg = agree.reduce((a,b)=>a+b,0)/agree.length;
+    cam.lock = { frames: avg, epoch: last.epoch }; cam.scanning = false;
+    $('#camSt').textContent = 'Locked'; $('#camRead').classList.add('locked'); $('#camGuide').classList.add('locked');
+    $('#camUse').disabled = false; $('#camUse').classList.add('ready'); $('#camStart').textContent = 'Scan again';
+    $('#camMsg').textContent = 'Locked. Tap Use this sync.';
+  } else {
+    $('#camSt').textContent = `${agree.length} of 3 readings agree`;
+  }
+}
+$('#camUse').onclick = () => { if(cam.lock) applySync(cam.lock.frames, cam.lock.epoch, 'cam'); };
+
+// --- Audio LTC ---
+const ltc = { ctx:null, stream:null, proc:null, last:null, run:0, anchors:[], lock:null, level:0, raf:0, fpsEst:0, dfSeen:null };
+function resetLtcUI(){
+  $('#ltcTC').textContent = '--:--:--:--'; $('#ltcSt').textContent = 'Not listening';
+  $('#ltcRead').classList.remove('locked'); $('#ltcUse').disabled = true; $('#ltcStart').textContent = 'Start listening'; syncStep('#ltcStart','#ltcUse','start');
+  $('#ltcMeter').style.width = '0';
+}
+function stopLtc(){
+  if(ltc.proc){ ltc.proc.disconnect(); ltc.proc.onaudioprocess = null; ltc.proc = null; }
+  if(ltc.stream){ ltc.stream.getTracks().forEach(t=>t.stop()); ltc.stream = null; }
+  if(ltc.ctx){ ltc.ctx.close().catch(()=>{}); ltc.ctx = null; }
+  cancelAnimationFrame(ltc.raf);
+}
+$('#ltcStart').onclick = async () => {
+  if(ltc.stream){ stopLtc(); $('#ltcStart').textContent = 'Start listening'; $('#ltcSt').textContent = 'Paused'; $('#ltcUse').disabled = true; syncStep('#ltcStart','#ltcUse','start'); return; }
+  try{
+    ltc.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ltc.ctx.resume();
+    ltc.stream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 } });
+  }catch(e){ stopLtc(); $('#ltcSt').textContent = 'Mic blocked'; syncStep('#ltcStart','#ltcUse','start'); toast('Allow microphone access, or use another sync method.'); return; }
+  const src = ltc.ctx.createMediaStreamSource(ltc.stream);
+  const proc = ltc.ctx.createScriptProcessor(2048, 1, 1); ltc.proc = proc;
+  const mute = ltc.ctx.createGain(); mute.gain.value = 0;
+  src.connect(proc); proc.connect(mute); mute.connect(ltc.ctx.destination);
+  ltc.last = null; ltc.run = 0; ltc.anchors = []; ltc.lock = null; ltc.shown = null;
+  const sr = ltc.ctx.sampleRate;
+  let bufEnd = 0, bufLen = 0;
+  const dec = new LTCDecoder(sr, fr => {
+    const r = sheetRate();
+    ltc.fpsEst = fr.fpsEst; ltc.dfSeen = fr.df; ltc.shown = fr;
+    if(fr.f >= r.base){ ltc.run = 0; return; }
+    const f = partsToFrames(fr.h, fr.m, fr.s, fr.f, r);
+    const at = bufEnd - (bufLen - fr.sampleIndex)/sr*1000;
+    if(ltc.last != null && f === (ltc.last + 1) % framesPerDay(r)) ltc.run++; else { ltc.run = 1; ltc.anchors = []; }
+    ltc.last = f;
+    ltc.anchors.push({ frames: f + 1, epoch: at }); if(ltc.anchors.length > 12) ltc.anchors.shift();
+  });
+  proc.onaudioprocess = e => {
+    const buf = e.inputBuffer.getChannelData(0);
+    bufEnd = epochNow(); bufLen = buf.length;
+    let pk = 0; for(let i=0;i<buf.length;i+=4){ const a = Math.abs(buf[i]); if(a>pk) pk=a; }
+    ltc.level = Math.max(pk, ltc.level*0.85);
+    dec.process(buf);
+  };
+  $('#ltcStart').textContent = 'Stop listening'; $('#ltcSt').textContent = 'Listening…'; syncStep('#ltcStart','#ltcUse','use');
+  const tick = () => {
+    if(!ltc.stream) return;
+    $('#ltcMeter').style.width = Math.min(100, ltc.level*140) + '%';
+    const r = sheetRate();
+    if(ltc.shown){ const x = ltc.shown; $('#ltcTC').textContent = `${p2(x.h)}:${p2(x.m)}:${p2(x.s)}${x.df?';':':'}${p2(x.f)}`; }
+    const mismatch = ltc.fpsEst && Math.abs(ltc.fpsEst - realFps(r)) > 1.2;
+    if(ltc.run >= 8 && !mismatch){
+      const fps = realFps(r), ref = ltc.anchors[ltc.anchors.length-1];
+      const avg = ltc.anchors.reduce((a,c)=>a + c.frames + (ref.epoch - c.epoch)/1000*fps, 0)/ltc.anchors.length;
+      ltc.lock = { frames: avg, epoch: ref.epoch };
+      $('#ltcRead').classList.add('locked'); $('#ltcSt').textContent = `Locked, about ${ltc.fpsEst.toFixed(2)} fps`; $('#ltcUse').disabled = false; $('#ltcUse').classList.add('ready');
+    } else if(mismatch && ltc.run > 3){
+      $('#ltcRead').classList.remove('locked'); $('#ltcUse').disabled = true; $('#ltcUse').classList.remove('ready');
+      $('#ltcSt').textContent = `Signal is about ${ltc.fpsEst.toFixed(1)} fps, not ${r.label}`;
+    } else if(ltc.level < 0.01){ $('#ltcSt').textContent = 'No signal'; }
+    else if(ltc.run < 8){ $('#ltcSt').textContent = ltc.shown ? 'Reading…' : 'Searching for LTC…'; }
+    ltc.raf = requestAnimationFrame(tick);
+  };
+  tick();
+};
+$('#ltcUse').onclick = () => { if(ltc.lock) applySync(ltc.lock.frames, ltc.lock.epoch, 'ltc'); };
+
+// ================= Export =================
+let exIds = [], exFmt = 'edl', exComb = false;
+function edlSafe(s){ return String(s).replace(/[|\r\n]+/g,' ').trim(); }
+function buildEDL(sessions, title){
+  const r = rateById(sessions[0].rateId);
+  const out = [`TITLE: ${edlSafe(title)}`, `FCM: ${r.df ? 'DROP FRAME' : 'NON-DROP FRAME'}`, ''];
+  let n = 0;
+  const all = sessions.flatMap(s => s.markers).sort((a,b)=>a.frames-b.frames);
+  for(const m of all){
+    n++;
+    const a = framesToTC(m.frames, r), b = framesToTC(m.frames + 1, r);
+    const name = edlSafe(m.note ? `${m.name} - ${m.note}` : m.name);
+    out.push(`${String(n).padStart(3,'0')}  001      V     C        ${a} ${b} ${a} ${b}  `);
+    out.push(` |C:ResolveColor${nearestResolve(m.color)} |M:${name} |D:1`);
+    out.push('');
+  }
+  return out.join('\n');
+}
+function csvCell(v){ v = String(v ?? ''); return /[",\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v; }
+function buildCSV(sessions){
+  const rows = [['Session','Marker','Timecode','Name','Color','Resolve color','Note','Frame rate']];
+  for(const s of sessions){ const r = rateById(s.rateId); sortedMarkers(s).forEach((m,i)=> rows.push([s.name, i+1, framesToTC(m.frames,r), m.name, m.color, nearestResolve(m.color), m.note, r.label])); }
+  return rows.map(r=>r.map(csvCell).join(',')).join('\n');
+}
+function buildTXT(sessions){
+  return sessions.map(s => {
+    const r = rateById(s.rateId), ms = sortedMarkers(s);
+    return [`${s.name}`, `${rateById(s.rateId).label} fps, ${ms.length} marker${ms.length===1?'':'s'}`, '',
+      ...ms.map((m,i)=>`${String(i+1).padStart(3,' ')}  ${framesToTC(m.frames,r)}  ${m.name}${m.note?'  ('+m.note+')':''}`)].join('\n');
+  }).join('\n\n');
+}
+const fileSafe = s => String(s).replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_') || 'markers';
+function exportFiles(){
+  const ss = exIds.map(id => S.sessions.find(s=>s.id===id)).filter(s => s && s.markers.length && s.rateId);
+  if(!ss.length) return [];
+  const ext = { edl:'edl', csv:'csv', txt:'txt' }[exFmt];
+  const build = list => exFmt === 'edl' ? buildEDL(list, list.length>1 ? (exTitle || 'Tally markers') : list[0].name) : exFmt === 'csv' ? buildCSV(list) : buildTXT(list);
+  if(exComb || ss.length === 1){
+    const name = ss.length === 1 ? ss[0].name : (exTitle || `Tally_${new Date().toISOString().slice(0,10)}`);
+    return [{ name: `${fileSafe(name)}.${ext}`, text: build(ss) }];
+  }
+  return ss.map(s => ({ name: `${fileSafe(s.name)}.${ext}`, text: build([s]) }));
+}
+let exTitle = null;
+function openExport(ids, title){
+  exIds = ids; exComb = false; exTitle = title || null;
+  const ss = ids.map(id => S.sessions.find(s=>s.id===id)).filter(Boolean);
+  const multi = ss.length > 1;
+  $('#combineSeg').classList.toggle('hidden', !multi);
+  const empty = ss.filter(s => !s.markers.length).length;
+  const rates = new Set(ss.filter(s=>s.markers.length).map(s=>s.rateId));
+  const warn = [];
+  if(empty) warn.push(`${empty} session${empty>1?'s have':' has'} no markers and will be skipped.`);
+  $('#exWarn').dataset.rates = rates.size;
+  $('#exWarn').dataset.base = warn.join(' ');
+  renderExport();
+  openSheet('export');
+}
+function renderExport(){
+  $$('#fmtSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.fmt === exFmt));
+  $$('#combineSeg button').forEach(b => b.setAttribute('aria-pressed', (b.dataset.comb === '1') === exComb));
+  let w = $('#exWarn').dataset.base || '';
+  if(exComb && exFmt === 'edl' && +$('#exWarn').dataset.rates > 1){ exComb = false; w += ' These sessions use different frame rates, so they export as separate EDLs.'; $$('#combineSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.comb === '0')); }
+  $('#exWarn').textContent = w.trim(); $('#exWarn').classList.toggle('hidden', !w.trim());
+  $('#exHelp').classList.toggle('hidden', exFmt !== 'edl');
+  const files = exportFiles();
+  $('#exPreview').textContent = files.length ? (files.length > 1 ? `${files.length} files: ${files.map(f=>f.name).join(', ')}\n\n` : `${files[0].name}\n\n`) + files[0].text : 'Nothing to export yet. Tap marker buttons during a session first.';
+  ['#exCopy','#exDownload','#exShare'].forEach(s => $(s).disabled = !files.length);
+}
+$('#fmtSeg').onclick = e => { const b = e.target.closest('[data-fmt]'); if(b){ exFmt = b.dataset.fmt; renderExport(); } };
+$('#combineSeg').onclick = e => { const b = e.target.closest('[data-comb]'); if(b){ exComb = b.dataset.comb === '1'; renderExport(); } };
+const toFile = f => new File([f.text], f.name, { type: 'text/plain' });
+function download(f){
+  const url = URL.createObjectURL(new Blob([f.text], {type:'text/plain'}));
+  const a = document.createElement('a'); a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+}
+$('#exDownload').onclick = () => { const fs = exportFiles(); fs.forEach((f,i)=> setTimeout(()=>download(f), i*350)); toast(fs.length>1 ? `Downloading ${fs.length} files.` : `Downloaded ${fs[0].name}`); };
+$('#exShare').onclick = async () => {
+  const fs = exportFiles(), files = fs.map(toFile);
+  if(navigator.canShare && navigator.canShare({ files })){
+    try{ await navigator.share({ files, title:'Tally markers' }); }catch(e){ if(e.name !== 'AbortError') toast("Share didn't open. Try Download."); }
+  } else { fs.forEach((f,i)=> setTimeout(()=>download(f), i*350)); toast('Sharing files isn’t supported here, so they downloaded instead.'); }
+};
+$('#exCopy').onclick = async () => {
+  const text = exportFiles().map(f => f.text).join('\n\n');
+  try{ await navigator.clipboard.writeText(text); toast('Copied.'); }
+  catch(e){ const r = document.createRange(); r.selectNodeContents($('#exPreview')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Selected. Press copy.'); }
+};
+
+// Size the big readout to fill its box whatever font actually loaded (offline on set falls back to a system mono).
+function fitReadout(){
+  for(const [sel,max] of [['#readout',120],['#homeTC',72]]){
+    const el = $(sel); if(!el.offsetParent) continue;
+    el.style.fontSize = '100px';
+    const w = el.scrollWidth, avail = el.clientWidth;
+    if(w && avail) el.style.fontSize = Math.min(max, 100*avail/w*0.97).toFixed(1) + 'px';
+  }
+}
+window.addEventListener('resize', fitReadout);
+if(document.fonts) document.fonts.ready.then(fitReadout);
+
+// ================= Render loop =================
+let lastF = null;
+function frameLoop(){ frameOnce(); requestAnimationFrame(frameLoop); }
+function frameOnce(){
+  const fN = Math.floor(framesNow()), r = clockRate();
+  if(fN !== lastF){
+    lastF = fN;
+    const tc = framesToTC(fN, r);
+    $('#homeTC').textContent = tc;
+    if(S.view === 'rec'){
+      const s = cur();
+      const sr = s && s.rateId ? rateById(s.rateId) : r;
+      const p = framesToParts(fN, r), sep = r.df ? ';' : ':';
+      $('#readout').innerHTML = `${p2(p.h)}<span class="sep">:</span>${p2(p.m)}<span class="sep">:</span>${p2(p.s)}<span class="sep">${sep}</span><span class="ff">${p2(p.f)}</span>`;
+      const ticks = $('#ticks').children;
+      for(let i=0;i<ticks.length;i++) ticks[i].className = i === p.f ? 'now' : i < p.f ? 'on' : '';
+      if(s && s.status === 'rolling'){
+        const el = (epochNow() - s.rolls[s.rolls.length-1].startEpoch)/1000;
+        const h = Math.floor(el/3600), m = Math.floor(el/60)%60, sec = Math.floor(el)%60;
+        $('#recElapsed').textContent = (h ? h+':' : '') + p2(m) + ':' + p2(sec);
+      } else $('#recElapsed').textContent = '';
+      if(sr.id !== r.id && s && s.markers.length) $('#recRate').textContent = `${sr.label} session, clock at ${r.label}`;
+    }
+    if(fN % r.base === 0) renderPills();
+  }
+}
+
+// ================= Offline =================
+// sw.js keeps a copy of the app and the text reader on the phone, so it opens and runs with no connection.
+const VENDOR_FILES = ['vendor/tesseract/tesseract.min.js','vendor/tesseract/worker.min.js','vendor/tesseract-core/tesseract-core-simd-lstm.wasm.js',
+  'vendor/tesseract-core/tesseract-core-lstm.wasm.js','vendor/lang/eng.traineddata.gz'];
+async function offlineState(){
+  if(!('serviceWorker' in navigator) || !window.caches || !/^https:|^http:\/\/(localhost|127\.0\.0\.1)/.test(location.href)) return 'unsupported';
+  try{
+    const reg = await navigator.serviceWorker.getRegistration();
+    if(!reg) return 'pending';
+    const hits = await Promise.all(['index.html', ...VENDOR_FILES].map(p => caches.match(new URL(p, location.href).href)));
+    return hits.every(Boolean) ? 'ready' : 'pending';
+  }catch(e){ return 'pending'; }
+}
+async function renderOffline(){
+  const el = $('#offlineSt'); if(!el) return;
+  const st = await offlineState();
+  el.dataset.state = st;
+  el.textContent = st === 'ready' ? 'Ready. Tally opens and runs with no Wi-Fi or signal, including camera sync.'
+    : st === 'pending' ? 'Saving a copy to this phone. Keep the app open on Wi-Fi for a minute.'
+    : 'Offline use works when Tally is opened from its web link and added to the Home Screen.';
+}
+if('serviceWorker' in navigator && /^https:|^http:\/\/(localhost|127\.0\.0\.1)/.test(location.href)){
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('Offline copy unavailable', e));
+  navigator.serviceWorker.addEventListener('message', e => {
+    if(e.data && e.data.type === 'offline-ready' && !hadController) toast('Saved to this phone. Tally now works without a connection.');
+    if(openId === 'settings') renderOffline();
+  });
+  if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+}
+
+// ================= Boot =================
+(async function boot(){
+  const [st, sy, ss, fs, ls] = await Promise.all([Store.get('tally:settings'), Store.get('tally:sync'), Store.get('tally:sessions'), Store.get('tally:folders'), Store.get('tally:layouts')]);
+  if(Array.isArray(fs)) S.folders = fs;
+  if(Array.isArray(ls)) S.layouts = ls;
+  if(st){
+    const ok = Array.isArray(st.buttons) && st.buttons.length >= 1 && st.buttons.length <= MAX_BUTTONS;
+    S.settings = { ...S.settings, ...st, buttons: ok ? st.buttons.map(b => ({ ...b, id: b.id || uid() })) : S.settings.buttons };
+  }
+  S.sync = sy && sy.rateId ? sy : todAnchor('23.976');
+  if(!sy){ saveSync(); }
+  if(Array.isArray(ss)) S.sessions = ss;
+  applyTheme(); renderPills();
+  const rolling = S.sessions.find(s => s.status === 'rolling');
+  if(rolling){ S.currentId = rolling.id; S.folderId = rolling.folderId && folderById(rolling.folderId) ? rolling.folderId : null; show('rec'); keepAwake(true); } else show('home');
+  requestAnimationFrame(frameLoop);
+})();
+</script>
+</body></html>
