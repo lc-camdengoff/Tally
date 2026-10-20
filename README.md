@@ -5,7 +5,8 @@ OCR, audio LTC, a manual tap, or time of day), then tap colored buttons to log
 moments. Export the markers as a Resolve EDL, CSV or text list.
 
 The whole app is `index.html`: no build step. Everything is saved in the
-browser's `localStorage` on the device.
+browser's `localStorage` on the device, and also to the person's filmmaking
+account when they're signed in (see *Saving to the account*).
 
 ## Offline
 
@@ -29,6 +30,31 @@ the files in its `PRECACHE` list.
 If camera sync can't load the local text reader, it falls back to jsDelivr.
 
 Camera and microphone access need the page served over HTTPS (or `localhost`).
+
+## Saving to the account
+
+Signed in to their filmmaking account (Settings → Filmmaking account → Sign
+in), a person's sessions and folders also save to the shared database, so
+they're safe if the phone is lost and show up on their other devices: log on a
+phone, then open Tally on the edit machine to export the EDL. Signed out or
+offline the app works exactly as before. The phone's copy is the one it runs on,
+and the account catches up when there's a connection.
+
+- `api.php` is the only server code: `me`, `changes` and `save`, JSON in and
+  out. It uses the shared sign-in in `../auth/` (filmmaking-home) and its
+  database, and creates its table, `tally_items` (`schema.sql`), on first use.
+  `lib.php` and `schema.sql` are closed to the web by `.htaccess`.
+- Every session and folder carries `updated`, set on the device whenever it
+  changes, and the later change wins. A deletion is saved too, so it reaches
+  the other devices. A session someone is logging markers into is never
+  deleted from under them; it goes back up instead.
+- Sessions made while signed out are saved to whoever signs in next on that
+  phone. Sessions already saved to one account are never sent to another.
+- Access is the `tally` role in filmmaking-home's `auth/tools.php`: someone set
+  to No access on Team admin can still use the app, but it doesn't save to their
+  account.
+- Button layouts and settings stay on each device. A folder's buttons travel
+  with the folder.
 
 ## Deploying
 

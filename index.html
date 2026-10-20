@@ -410,6 +410,11 @@ pre.preview{background:var(--bg);border:1px solid var(--line);border-radius:var(
     <p class="offline-st" id="offlineSt">Checking…</p>
   </section>
   <section>
+    <h3>Filmmaking account</h3>
+    <p class="offline-st" id="acctSt">Checking…</p>
+    <a class="btn block hidden" id="acctSignIn" href="#" style="margin-top:10px;text-decoration:none">Sign in</a>
+  </section>
+  <section>
     <h3>Appearance</h3>
     <div class="seg" id="themeSeg"><button data-theme-set="dark">Dark</button><button data-theme-set="light">Light</button></div>
   </section>
@@ -666,7 +671,7 @@ const S = {
 };
 const saveSettings = () => Store.set('tally:settings', S.settings);
 const saveSync = () => Store.set('tally:sync', S.sync);
-const saveSessions = () => Store.set('tally:sessions', S.sessions);
+const saveSessions = () => { acctNote('session'); return Store.set('tally:sessions', S.sessions); };
 
 // ================= Clock =================
 function todAnchor(rateId){
@@ -738,9 +743,12 @@ function applyLayout(bs, label){
 }
 
 // ================= Folders =================
-const saveFolders = () => Store.set('tally:folders', S.folders);
+const saveFolders = () => { acctNote('folder'); return Store.set('tally:folders', S.folders); };
 const folderById = id => S.folders.find(f => f.id === id);
-const sessionsIn = fid => S.sessions.filter(s => (s.folderId || null) === (fid || null));
+// A session whose folder isn't on this device (not saved down from the account yet, say) shows
+// on the main list rather than nowhere.
+const folderOf = s => s.folderId && folderById(s.folderId) ? s.folderId : null;
+const sessionsIn = fid => S.sessions.filter(s => folderOf(s) === (fid || null));
 function sessionWhen(s){
   const d = new Date(s.created);
   return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ', ' + d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
@@ -1326,7 +1334,7 @@ function applyTheme(){
 }
 function renderSettings(){
   applyTheme();
-  renderOffline();
+  renderOffline(); renderAccount();
   $('#setRate').innerHTML = rateOptions(S.sync.rateId);
   const BS = activeButtons();
   const active = LOOKS.find(l => BS.every((b,i)=>b.color.toLowerCase() === l.colors[i % l.colors.length].toLowerCase()));
@@ -1778,6 +1786,245 @@ if('serviceWorker' in navigator && /^https:|^http:\/\/(localhost|127\.0\.0\.1)/.
   if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
 }
 
+// ================= Saving to the account =================
+// Signed in to a filmmaking account, sessions and folders also save to it through api.php, so they
+// survive a lost phone and show up on the person's other devices. Signed out or offline nothing
+// changes: the phone's copy is the one the app runs on, and the account catches up when it can.
+// Each item carries `updated` (ms, set whenever it changes) and the later change wins, so two
+// devices editing one session settle on the same thing. `owner` is whose account it was saved to;
+// the phone never pushes someone else's sessions to whoever signs in next.
+const ACCT_KINDS = { session: () => S.sessions, folder: () => S.folders };
+const ACCT_TOMB_DAYS = 90;
+const Acct = {
+  state: 'checking',   // checking | in | out | no-access | offline | unavailable
+  user: null, csrf: '', loginUrl: '', lastSaved: 0,
+  // Kept on the phone: whose account, how far through its changes we've read, the `updated` of
+  // each item last saved there, and deletions still to send.
+  meta: { owner: null, cursor: 0, pushed: {}, tombs: {} },
+  seen: {},            // 'kind:id' -> { s: its JSON when last looked at, o: owner }
+  timer: 0, busy: false, again: false,
+};
+const acctKey = (kind, id) => kind + ':' + id;
+const saveAcctMeta = () => Store.set('tally:account', Acct.meta);
+function acctSig(it){ const { updated, owner, ...rest } = it; return JSON.stringify(rest); }
+// Only a real web address has an api.php beside it (not a file opened from disk or a preview).
+const acctPossible = () => /^https?:$/.test(location.protocol);
+
+// Called by saveSessions()/saveFolders(): stamps whatever changed and remembers what was deleted.
+function acctNote(kind){
+  const now = Date.now(), here = new Set(); let changed = false;
+  for(const it of ACCT_KINDS[kind]()){
+    const k = acctKey(kind, it.id), sig = acctSig(it); here.add(k);
+    const was = Acct.seen[k];
+    if(!was || was.s !== sig){
+      it.updated = Math.max(now, (it.updated || 0) + 1);
+      Acct.seen[k] = { s: sig, o: it.owner || null }; delete Acct.meta.tombs[k]; changed = true;
+    }
+  }
+  for(const k of Object.keys(Acct.seen)){
+    if(k.startsWith(kind + ':') && !here.has(k)){
+      Acct.meta.tombs[k] = { at: now, o: Acct.seen[k].o }; delete Acct.seen[k]; changed = true;
+    }
+  }
+  if(changed){ saveAcctMeta(); acctSoon(); }
+}
+function acctPrime(){
+  for(const [kind, list] of Object.entries(ACCT_KINDS))
+    for(const it of list()){
+      if(!it.updated) it.updated = it.created || Date.now();
+      Acct.seen[acctKey(kind, it.id)] = { s: acctSig(it), o: it.owner || null };
+    }
+  const cut = Date.now() - ACCT_TOMB_DAYS * 864e5;
+  for(const [k, t] of Object.entries(Acct.meta.tombs)) if(!t || t.at < cut) delete Acct.meta.tombs[k];
+}
+
+// What arrives from the account is checked like anything from outside: it ends up in style
+// attributes and the timecode maths. Names and notes are escaped wherever they're drawn.
+const HEX = /^#[0-9a-f]{6}$/i;
+const num = (v, d = 0) => Number.isFinite(v) ? v : d;
+const str = (v, max = 300) => typeof v === 'string' ? v.slice(0, max) : '';
+const okId = v => typeof v === 'string' && /^[A-Za-z0-9_-]{4,64}$/.test(v);
+function cleanSession(d){
+  if(!d || !okId(d.id) || !Array.isArray(d.markers)) return null;
+  const rate = RATES.some(r => r.id === d.rateId) ? d.rateId : RATES[0].id;
+  return { id: d.id, name: str(d.name, 120) || 'Session', created: num(d.created, Date.now()), rateId: rate,
+    status: ['rolling','ended','stopped'].includes(d.status) ? d.status : 'ended',
+    ended: Number.isFinite(d.ended) ? d.ended : undefined,
+    folderId: okId(d.folderId) ? d.folderId : null,
+    rolls: (Array.isArray(d.rolls) ? d.rolls : []).filter(r => r && Number.isFinite(r.start)).map(r => ({
+      start: r.start, startEpoch: num(r.startEpoch), end: Number.isFinite(r.end) ? r.end : null,
+      ...(Number.isFinite(r.endEpoch) ? { endEpoch: r.endEpoch } : {}) })),
+    markers: d.markers.filter(m => m && okId(m.id) && Number.isFinite(m.frames)).map(m => ({
+      id: m.id, frames: Math.floor(m.frames), name: str(m.name, 80) || 'Marker', color: HEX.test(m.color) ? m.color : RESOLVE_COLORS.Blue,
+      bid: str(m.bid, 64), note: str(m.note, 300) })) };
+}
+function cleanFolder(d){
+  if(!d || !okId(d.id)) return null;
+  const f = { id: d.id, name: str(d.name, 80) || 'Folder', created: num(d.created, Date.now()) };
+  if(Array.isArray(d.buttons) && d.buttons.length)
+    f.buttons = d.buttons.slice(0, MAX_BUTTONS).map(b => ({ id: okId(b && b.id) ? b.id : uid(), name: str(b && b.name, 40),
+      color: HEX.test(b && b.color) ? b.color : LOOKS[0].colors[0] }));
+  if(LOOKS.some(l => l.id === d.look)) f.look = d.look;
+  return f;
+}
+
+async function acctApi(action, { query = '', body } = {}){
+  const res = await fetch(`api.php?action=${action}${query}`, {
+    method: body ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+    headers: body ? { 'Content-Type': 'application/json', 'X-Slate-CSRF': Acct.csrf } : {},
+    body: body ? JSON.stringify(body) : undefined });
+  let json = null; try{ json = await res.json(); }catch(e){}
+  if(!res.ok || !json || !json.ok){ const err = new Error((json && json.error) || 'http_' + res.status); err.status = res.status; err.body = json; throw err; }
+  return json;
+}
+function setAcctState(st){ Acct.state = st; if(openId === 'settings') renderAccount(); }
+async function acctCheck(){
+  const j = await acctApi('me');
+  Acct.user = j.user; Acct.csrf = j.csrf;
+  if(Acct.meta.owner !== j.user.username){
+    // A different account from last time on this phone: read all of theirs from the start.
+    const first = Acct.meta.owner === null;
+    Acct.meta = { owner: j.user.username, cursor: 0, pushed: {}, tombs: Acct.meta.tombs };
+    saveAcctMeta();
+    toast(first ? `Signed in as ${j.user.name}. Sessions now save to your account.` : `Signed in as ${j.user.name}.`);
+  }
+}
+// Apply one change from the account. True if it changed anything here.
+function acctApply(it){
+  const list = ACCT_KINDS[it.kind]; if(!list) return false;
+  const arr = list(), k = acctKey(it.kind, it.id), i = arr.findIndex(x => x.id === it.id), local = i >= 0 ? arr[i] : null;
+  const tomb = Acct.meta.tombs[k];
+  if(local && local.updated === it.updated){ Acct.meta.pushed[k] = it.updated; return false; }   // the same change
+  if(local && (local.updated || 0) > it.updated) return false;    // ours is newer; it'll be sent
+  if(!local && tomb && tomb.at >= it.updated) return false;       // deleted here after that change
+  if(it.deleted && local && it.kind === 'session' && local.status === 'rolling' && local.id === S.currentId){
+    // Never pull a session out from under someone logging markers into it: it goes back up instead.
+    local.updated = it.updated + 1; return false;
+  }
+  delete Acct.meta.tombs[k];
+  if(it.deleted){
+    delete Acct.meta.pushed[k];
+    if(!local) return false;
+    arr.splice(i, 1); delete Acct.seen[k];
+    if(it.kind === 'session' && S.currentId === it.id) S.currentId = null;
+    return true;
+  }
+  const data = it.kind === 'session' ? cleanSession(it.data) : cleanFolder(it.data); if(!data) return false;
+  Acct.meta.pushed[k] = it.updated;
+  data.updated = it.updated; data.owner = Acct.meta.owner;
+  if(i >= 0) arr[i] = data; else arr.push(data);
+  Acct.seen[k] = { s: acctSig(data), o: data.owner };
+  return true;
+}
+async function acctPull(){
+  for(let more = true; more; ){
+    const j = await acctApi('changes', { query: '&since=' + Acct.meta.cursor });
+    let changed = false;
+    for(const it of j.items) changed = acctApply(it) || changed;
+    Acct.meta.cursor = j.cursor; more = j.more; saveAcctMeta();
+    if(changed){
+      Store.set('tally:sessions', S.sessions); Store.set('tally:folders', S.folders);
+      if(!openId){ if(S.view === 'home') renderHome(); else renderRec(); }
+    }
+  }
+}
+function acctPending(){
+  const me = Acct.meta.owner, items = [];
+  for(const [kind, list] of Object.entries(ACCT_KINDS))
+    for(const it of list()){
+      if(it.owner && it.owner !== me) continue;
+      if(Acct.meta.pushed[acctKey(kind, it.id)] === it.updated) continue;
+      const { owner, ...data } = it;
+      items.push({ kind, id: it.id, updated: it.updated, data });
+    }
+  for(const [k, t] of Object.entries(Acct.meta.tombs)){
+    if(t.o && t.o !== me) continue;
+    const cut = k.indexOf(':');
+    items.push({ kind: k.slice(0, cut), id: k.slice(cut + 1), updated: t.at, deleted: true });
+  }
+  return items;
+}
+async function acctPush(){
+  const items = acctPending(); if(!items.length) return;
+  // In batches that stay well under api.php's limits.
+  const batches = []; let batch = [], size = 0;
+  for(const it of items){
+    const n = JSON.stringify(it).length;
+    if(batch.length && (batch.length >= 50 || size + n > 3e6)){ batches.push(batch); batch = []; size = 0; }
+    batch.push(it); size += n;
+  }
+  if(batch.length) batches.push(batch);
+  let stale = false;
+  for(const b of batches){
+    const j = await acctApi('save', { body: { items: b } });
+    const done = [...j.saved, ...j.rejected];   // a rejected one won't do better next time
+    if(j.rejected.length) console.warn('Not saved to the account', j.rejected);
+    for(const ref of done){
+      const k = acctKey(ref.kind, ref.id), sent = b.find(x => x.kind === ref.kind && x.id === ref.id);
+      if(!sent) continue;
+      if(sent.deleted){ delete Acct.meta.tombs[k]; delete Acct.meta.pushed[k]; continue; }
+      Acct.meta.pushed[k] = sent.updated;
+      const local = ACCT_KINDS[ref.kind]().find(x => x.id === ref.id);
+      if(local){ local.owner = Acct.meta.owner; if(Acct.seen[k]) Acct.seen[k].o = local.owner; }
+    }
+    if(j.stale.length) stale = true;
+    saveAcctMeta();
+  }
+  Store.set('tally:sessions', S.sessions); Store.set('tally:folders', S.folders);
+  if(stale) await acctPull();   // another device got there first; take its version
+}
+async function acctSync(){
+  if(!acctPossible()){ setAcctState('unavailable'); return; }
+  if(Acct.busy){ Acct.again = true; return; }
+  Acct.busy = true; clearTimeout(Acct.timer);
+  try{
+    if(Acct.state !== 'in') await acctCheck();
+    setAcctState('in');
+    await acctPull(); await acctPush();
+    Acct.lastSaved = Date.now(); setAcctState('in');
+  }catch(e){
+    if(e.status === 401){ Acct.user = null; Acct.loginUrl = (e.body && e.body.login_url) || ''; setAcctState('out'); }
+    else if(e.status === 403 && e.message === 'bad_csrf'){ setAcctState('checking'); acctSoon(1000); }
+    else if(e.status === 403){ setAcctState('no-access'); }
+    else if(!e.status){ setAcctState('offline'); }           // fetch itself failed: no connection
+    else { console.warn('Saving to the account failed', e); setAcctState('unavailable'); }
+  }finally{
+    Acct.busy = false;
+    if(Acct.again){ Acct.again = false; acctSoon(500); }
+  }
+}
+// Soon after a change rather than on every tap, so a run of markers goes up together.
+function acctSoon(ms = 2500){
+  if(!['in','offline','checking'].includes(Acct.state)) return;
+  clearTimeout(Acct.timer); Acct.timer = setTimeout(acctSync, ms);
+}
+function renderAccount(){
+  const el = $('#acctSt'), link = $('#acctSignIn'); if(!el) return;
+  const pending = Acct.meta.owner ? acctPending().length : 0;
+  const when = Acct.lastSaved ? new Date(Acct.lastSaved).toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }) : '';
+  el.dataset.state = Acct.state === 'in' ? 'ready' : Acct.state;
+  el.textContent = {
+    checking: 'Checking your filmmaking account…',
+    in: Acct.user ? `Signed in as ${Acct.user.name}. Sessions save to your account and show up on your other devices${
+      pending ? `. ${pending} change${pending > 1 ? 's' : ''} waiting to save.` : when ? `. Last saved ${when}.` : '.'}` : 'Signed in.',
+    out: 'Sign in to your filmmaking account to save sessions to it and see them on your other devices. Tally works the same without it.',
+    'no-access': 'Your filmmaking account isn’t set up to use Tally, so sessions stay on this phone. Ask an admin.',
+    offline: Acct.meta.owner ? `Offline. ${pending ? `${pending} change${pending > 1 ? 's' : ''} will save` : 'Changes save'} to your account when there’s a connection.`
+      : 'Offline. Sign in to your filmmaking account when there’s a connection to save sessions to it.',
+    unavailable: 'Saving to an account isn’t available right now. Sessions are safe on this phone.',
+  }[Acct.state];
+  link.classList.toggle('hidden', !(Acct.state === 'out' && Acct.loginUrl));
+  if(Acct.loginUrl) link.href = Acct.loginUrl;
+}
+window.addEventListener('online', () => acctSync());
+window.addEventListener('offline', () => { if(Acct.state === 'in') setAcctState('offline'); });
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') acctSync(); });
+// Picks up what the person's other devices saved while this one sits open, and retries a save
+// that failed. Signed out, nothing changes until they sign in, which reloads the page.
+setInterval(() => {
+  if(document.visibilityState === 'visible' && !['out','no-access'].includes(Acct.state)) acctSync();
+}, 60000);
+
 // ================= Boot =================
 (async function boot(){
   const [st, sy, ss, fs, ls] = await Promise.all([Store.get('tally:settings'), Store.get('tally:sync'), Store.get('tally:sessions'), Store.get('tally:folders'), Store.get('tally:layouts')]);
@@ -1790,10 +2037,14 @@ if('serviceWorker' in navigator && /^https:|^http:\/\/(localhost|127\.0\.0\.1)/.
   S.sync = sy && sy.rateId ? sy : todAnchor('23.976');
   if(!sy){ saveSync(); }
   if(Array.isArray(ss)) S.sessions = ss;
+  const am = await Store.get('tally:account');
+  if(am && typeof am === 'object') Acct.meta = { owner: am.owner || null, cursor: +am.cursor || 0, pushed: am.pushed || {}, tombs: am.tombs || {} };
+  acctPrime();
   applyTheme(); renderPills();
   const rolling = S.sessions.find(s => s.status === 'rolling');
   if(rolling){ S.currentId = rolling.id; S.folderId = rolling.folderId && folderById(rolling.folderId) ? rolling.folderId : null; show('rec'); keepAwake(true); } else show('home');
   requestAnimationFrame(frameLoop);
+  acctSync();
 })();
 </script>
 </body></html>
