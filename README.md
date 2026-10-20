@@ -20,3 +20,12 @@ adds:
 | `vendor/tesseract/`, `vendor/tesseract-core/`, `vendor/lang/eng.traineddata.gz` | Camera sync loads its text reader from the jsDelivr CDN, so it needs a connection |
 
 Camera and microphone access need the page served over HTTPS (or `localhost`).
+
+## Deploying
+
+Pushing to `main` runs `.github/workflows/deploy.yml`, which uploads the app
+over FTPS to `filmmaking/tally/`, live at
+<https://creativemedia.church/filmmaking/tally/>. It needs the `FTP_USERNAME`
+and `FTP_PASSWORD` repository secrets, the same FTP account the other
+filmmaking tools use (rooted at `public_html/filmmaking/`). It can also be run
+by hand from the Actions tab.

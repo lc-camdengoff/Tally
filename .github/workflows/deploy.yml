@@ -1,0 +1,40 @@
+# Push to main and https://creativemedia.church/filmmaking/tally/ updates.
+#
+# Uses the same FTP account as the other filmmaking tools, which is rooted at
+# public_html/filmmaking/, so ./tally/ here is filmmaking/tally/ on the server.
+# Repository secrets: FTP_USERNAME and FTP_PASSWORD.
+
+name: Deploy to creativemedia.church
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Two uploads into one folder at once would trip over each other's state file.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ftp.creativemedia.church
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./
+          server-dir: ./tally/
+          # The deploy only ever removes files it uploaded itself, so nothing
+          # else in filmmaking/ is at risk.
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .github/**
+            README.md
