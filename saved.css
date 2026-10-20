@@ -1,0 +1,76 @@
+/* Tally — the Saved sessions page. Colours, fonts and sizes are brand.css's
+   variables (filmmaking-home's style/brand.css), as on every tool's pages. */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; background: var(--gray-5); color: var(--black);
+  font: 15px/1.5 var(--font-body); -webkit-font-smoothing: antialiased;
+}
+a { color: var(--black); }
+.page { max-width: 980px; margin: 0 auto; padding: 36px 24px 80px; }
+
+.eyebrow {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--gray-30); margin-bottom: 8px;
+}
+h1 {
+  margin: 0 0 10px; font-family: var(--font-display); font-size: 36px; font-weight: 900;
+  line-height: 0.95; letter-spacing: -0.02em; text-transform: uppercase;
+}
+.lede { margin: 0 0 28px; color: var(--gray-40); max-width: 60ch; }
+.lede a { font-weight: 700; }
+
+.folder { margin-top: 28px; }
+h2 {
+  display: flex; align-items: baseline; gap: 12px; margin: 0 0 10px;
+  font-family: var(--font-display); font-size: 18px; font-weight: 900;
+  letter-spacing: -0.01em; text-transform: uppercase;
+}
+h2 .count {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: 0.09em; color: var(--gray-30);
+}
+
+.sessions { list-style: none; margin: 0; padding: 0; background: var(--white); border: 1px solid var(--gray-15); }
+.sessions li {
+  display: flex; align-items: center; gap: 18px; padding: 14px 18px;
+  border-bottom: 1px solid var(--gray-15);
+}
+.sessions li:last-child { border-bottom: 0; }
+.main { flex: 1; min-width: 0; }
+.name { font-weight: 700; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live {
+  margin-left: 6px; font-family: var(--font-mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--danger);
+}
+.sub {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--gray-30);
+}
+.swatches { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 8px; }
+.swatches svg { display: block; }
+
+.files { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: var(--control-height-sm); padding: 0 12px; border: 1px solid transparent;
+  background: var(--accent); color: var(--on-accent); text-decoration: none; white-space: nowrap;
+  font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.btn:hover { background: var(--accent-hover); }
+.btn.ghost { background: transparent; color: var(--gray-50); border-color: var(--gray-15); }
+.btn.ghost:hover { color: var(--black); border-color: var(--gray-30); }
+.none { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gray-30); }
+
+.empty {
+  margin-top: 8px; padding: 32px 24px; text-align: center; color: var(--gray-40);
+  background: var(--white); border: 1px dashed var(--gray-20);
+}
+.empty strong { display: block; color: var(--black); font-size: 17px; margin-bottom: 4px; }
+.empty a { font-weight: 700; }
+
+@media (max-width: 640px) {
+  .page { padding: 22px 14px 60px; }
+  h1 { font-size: 28px; }
+  .sessions li { flex-direction: column; align-items: stretch; gap: 10px; padding: 14px; }
+  .files { justify-content: flex-start; }
+}

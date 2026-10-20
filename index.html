@@ -7,33 +7,33 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tally">
-<meta name="theme-color" content="#14191f">
+<meta name="theme-color" content="#16171A">
 <title>Tally — timecode markers</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-<style>
-/* Fonts ship with the app so it looks the same with no connection. */
-@font-face{font-family:"Archivo";font-style:normal;font-display:swap;font-weight:100 900;font-stretch:62% 125%;src:url(fonts/archivo-latin-wdth-normal.woff2) format("woff2-variations"),url(fonts/archivo-latin-wdth-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
-@font-face{font-family:"Archivo";font-style:normal;font-display:swap;font-weight:100 900;font-stretch:62% 125%;src:url(fonts/archivo-latin-ext-wdth-normal.woff2) format("woff2-variations"),url(fonts/archivo-latin-ext-wdth-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
-@font-face{font-family:"Martian Mono";font-style:normal;font-display:swap;font-weight:100 800;font-stretch:75% 112.5%;src:url(fonts/martian-mono-latin-wdth-normal.woff2) format("woff2-variations"),url(fonts/martian-mono-latin-wdth-normal.woff2) format("woff2")}
-</style>
+<!-- The look every filmmaking tool shares (filmmaking-home's style/brand.css), and the shared nav
+     bar's styles. Before Tally's own, which are built on brand.css's variables. sw.js keeps a copy
+     of both, and the fonts brand.css loads, so the app looks the same offline. -->
+<link rel="stylesheet" href="../style/brand.css">
+<link rel="stylesheet" href="../auth/nav.css">
 <style>
 :root{
-  --font-ui:"Archivo", system-ui, -apple-system, sans-serif;
-  --font-tc:"Martian Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --tally:#ff3b30; --ok:#34c77b; --warn:#f5a524;
-  --r-lg:18px; --r-md:12px; --r-sm:8px;
+  /* The look is the filmmaking tools' shared one, from ../style/brand.css. These names are Tally's
+     own, kept so nothing below has to change; each is one of brand.css's tokens, and brand.css
+     turns its ramp over for html[data-theme="dark"], so they follow Appearance in Settings with no
+     dark copy here. Never give one of these a colour of its own: change brand.css, and every tool
+     changes with it. --ok, --warn, --accent and the fonts come straight from it. */
+  --bg:var(--gray-5); --panel:var(--white); --panel-2:var(--gray-10); --line:var(--gray-15);
+  --text:var(--black); --muted:var(--gray-30); --dim:var(--gray-20); --tick:var(--gray-10);
+  --shadow:var(--shadow-3);
+  --font-ui:var(--font-body);
+  --font-tc:var(--font-mono);
+  --r-lg:var(--radius-card); --r-md:var(--radius-sm); --r-sm:var(--radius-sm);
+  /* The tally light is Tally's own: the red a camera's record lamp is, on the Live state, the
+     record button and the brand mark. Not brand.css's --danger, which is an error. */
+  --tally:#ff3b30;
   --safe-t:env(safe-area-inset-top); --safe-b:env(safe-area-inset-bottom);
-}
-[data-theme="dark"]{
-  --bg:#14191f; --panel:#1c232b; --panel-2:#252e38; --line:#33404c;
-  --text:#e9eef3; --muted:#8b98a6; --dim:#56636f; --tick:#2b3540; --shadow:0 18px 50px rgba(0,0,0,.45);
-  color-scheme:dark;
-}
-[data-theme="light"]{
-  --bg:#e4e8ec; --panel:#f6f8fa; --panel-2:#ffffff; --line:#c7cfd7;
-  --text:#11171d; --muted:#56626e; --dim:#9aa6b1; --tick:#cfd6dd; --shadow:0 18px 50px rgba(20,30,40,.18);
   color-scheme:light;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -42,14 +42,18 @@ body{min-height:100dvh;padding-top:var(--safe-t);padding-bottom:var(--safe-b);fo
 input,textarea,select{-webkit-user-select:text;user-select:text}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--text);outline-offset:2px}
-h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.01em}
+/* Headings are brand.css's: Proxima Nova Black, all caps. */
+h1,h2,h3{margin:0;font-family:var(--font-display);font-weight:900;letter-spacing:-.01em;text-transform:uppercase}
 .hidden{display:none!important}
 .app{max-width:1100px;margin:0 auto;padding:0 16px 120px}
+/* The shared nav bar (auth/nav.css), drawn by renderNav(). It scrolls away here rather than
+   sticking, so on a phone it never sits over the timecode. */
+.fmnav{position:relative}
 
 /* Top bar */
 .bar{display:flex;align-items:center;gap:8px;height:56px}
 .bar .grow{flex:1;min-width:0}
-.brand{font-weight:800;font-size:22px;font-stretch:112%;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+.brand{font-family:var(--font-display);font-weight:900;font-size:22px;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:10px}
 .brand i{width:12px;height:12px;border-radius:50%;background:var(--tally);box-shadow:0 0 0 4px color-mix(in srgb,var(--tally) 22%,transparent)}
 .icon-btn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--text)}
 .icon-btn:active{background:var(--panel-2)}
@@ -63,15 +67,16 @@ h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.01em}
 .pill .age{color:var(--muted);font-weight:500}
 
 /* Buttons */
-.btn{height:48px;padding:0 20px;border-radius:var(--r-md);background:var(--panel-2);border:1px solid var(--line);font-weight:650;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn{height:48px;padding:0 20px;border-radius:var(--r-md);background:var(--panel-2);border:1px solid var(--line);font-weight:700;font-size:14px;letter-spacing:.05em;text-transform:uppercase;display:inline-flex;align-items:center;justify-content:center;gap:8px}
 .btn:active{transform:translateY(1px)}
-.btn.primary{background:var(--text);color:var(--bg);border-color:transparent}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.btn.primary:hover{background:var(--accent-hover)}
 .btn.danger{color:var(--tally)}
 .btn:disabled{opacity:.4;pointer-events:none}
 .btn svg{width:18px;height:18px}
 .btn.block{width:100%}
 /* Step emphasis in the sync sheet: the button to press next is big and filled, the other steps back. */
-.btn.go{height:58px;padding:0 12px;white-space:nowrap;font-size:17px;font-weight:800;background:var(--ok);color:#06140c;border-color:transparent;box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 24%,transparent);transition:background .2s, box-shadow .2s, opacity .2s}
+.btn.go{height:58px;padding:0 12px;white-space:nowrap;font-size:17px;font-weight:800;background:var(--ok);color:var(--white);border-color:transparent;box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 24%,transparent);transition:background .2s, box-shadow .2s, opacity .2s}
 .btn.go:disabled{opacity:.55}
 .btn.quiet{height:58px;padding:0 12px;white-space:nowrap;background:transparent;color:var(--muted);font-weight:600;border-color:var(--line);transition:opacity .2s}
 .btn.go.ready{animation:ready 1.2s ease-out 2}
@@ -132,7 +137,7 @@ h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.01em}
 .srow .live{color:var(--tally);font-weight:700;font-size:13px}
 .empty{background:var(--panel);border:1px dashed var(--line);border-radius:var(--r-lg);padding:28px 20px;color:var(--muted);text-align:center}
 .empty strong{display:block;color:var(--text);font-size:17px;margin-bottom:4px}
-.fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + var(--safe-b));height:56px;padding:0 26px;border-radius:999px;background:var(--text);color:var(--bg);font-weight:750;font-size:17px;white-space:nowrap;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);z-index:20}
+.fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + var(--safe-b));height:56px;padding:0 26px;border-radius:var(--radius-pill);background:var(--accent);color:var(--on-accent);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);z-index:20}
 .fab svg{width:20px;height:20px}
 .selbar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + var(--safe-b));background:var(--panel);border-top:1px solid var(--line);display:flex;gap:10px;z-index:20}
 .selbar .btn{flex:1}
@@ -191,13 +196,13 @@ h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.01em}
 /* Sheets */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;opacity:0;transition:opacity .2s}
 .scrim.show{opacity:1}
-.sheet{position:fixed;left:0;right:0;bottom:0;max-height:92dvh;overflow:auto;background:var(--panel);border-radius:22px 22px 0 0;z-index:41;padding:8px 18px calc(24px + var(--safe-b));transform:translateY(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);box-shadow:var(--shadow);-webkit-overflow-scrolling:touch}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:92dvh;overflow:auto;background:var(--panel);border-radius:var(--radius-card) var(--radius-card) 0 0;z-index:41;padding:8px 18px calc(24px + var(--safe-b));transform:translateY(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);box-shadow:var(--shadow);-webkit-overflow-scrolling:touch}
 .sheet.show{transform:none}
 @media (max-width:699px){
   .sheet{bottom:var(--kb,0px);max-height:calc(var(--vvh,100dvh) - var(--safe-t) - 18px);transition:transform .28s cubic-bezier(.2,.8,.2,1), bottom .2s ease-out}
 }
 html.sheet-open, html.sheet-open body{overflow:hidden;overscroll-behavior:none}
-@media (min-width:700px){.sheet{left:50%;right:auto;bottom:auto;top:50%;width:560px;border-radius:22px;transform:translate(-50%,-46%);opacity:0;transition:transform .22s, opacity .22s;padding-bottom:24px}.sheet.show{transform:translate(-50%,-50%);opacity:1}}
+@media (min-width:700px){.sheet{left:50%;right:auto;bottom:auto;top:50%;width:560px;border-radius:var(--radius-card);transform:translate(-50%,-46%);opacity:0;transition:transform .22s, opacity .22s;padding-bottom:24px}.sheet.show{transform:translate(-50%,-50%);opacity:1}}
 @media (prefers-reduced-motion:reduce){.sheet,.scrim,.monitor{transition:none}.mk.flash::after{animation:none}.monitor.rolling .state .rdot{animation:none}}
 .grab{width:44px;height:5px;border-radius:3px;background:var(--muted);opacity:.6;margin:6px auto 6px;position:relative}
 .grab::before{content:"";position:absolute;left:-40px;right:-40px;top:-14px;bottom:-14px}
@@ -211,13 +216,14 @@ html.sheet-open, html.sheet-open body{overflow:hidden;overscroll-behavior:none}
 .offline-st[data-state="ready"]::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:8px;vertical-align:middle}
 .sheet-head h2{font-size:21px;font-stretch:110%}
 .sheet section{margin-bottom:24px}
-.sheet h3{font-size:15px;margin-bottom:10px}
+/* Section labels as brand.css's eyebrows: mono, small, all caps. */
+.sheet h3{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:.09em;color:var(--muted);margin-bottom:10px}
 .hint{color:var(--muted);font-size:14px;margin:6px 0 0}
 .seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-md);padding:3px;gap:3px;overflow-x:auto}
 .seg button{flex:1;height:40px;border-radius:9px;font-weight:650;font-size:15px;color:var(--muted);white-space:nowrap;padding:0 10px}
 .seg button[aria-pressed="true"]{background:var(--panel-2);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
-.field label{font-weight:650;font-size:14px;color:var(--muted)}
+.field label{font-family:var(--font-mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
 .input,select.input,textarea.input{height:48px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--bg);color:var(--text);padding:0 14px;font:inherit;font-size:16px;width:100%}
 textarea.input{height:84px;padding:12px 14px;resize:vertical}
 .tc-input{font-family:var(--font-tc);font-stretch:80%;font-size:26px;height:60px;text-align:center;letter-spacing:.02em}
@@ -263,13 +269,13 @@ textarea.input{height:84px;padding:12px 14px;resize:vertical}
 .swpick{display:flex;flex-wrap:wrap;gap:8px}
 .swpick button{width:38px;height:38px;border-radius:10px;border:2px solid transparent}
 .swpick button[aria-pressed="true"]{border-color:var(--text);box-shadow:0 0 0 2px var(--panel) inset}
-pre.preview{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-md);padding:12px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.5;max-height:200px;overflow:auto;white-space:pre;-webkit-user-select:text;user-select:text;margin:0}
+pre.preview{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-md);padding:12px;font-family:var(--font-mono);font-size:11.5px;line-height:1.5;max-height:200px;overflow:auto;white-space:pre;-webkit-user-select:text;user-select:text;margin:0}
 .steps{margin:8px 0 0;padding-left:20px;color:var(--muted);font-size:14px}
 .steps li{margin-bottom:4px}
 .warnbox{border:1px solid var(--warn);color:var(--text);background:color-mix(in srgb,var(--warn) 12%,transparent);border-radius:var(--r-md);padding:10px 12px;font-size:14px;margin-bottom:12px}
 
 /* Toast */
-.toast{position:fixed;left:50%;bottom:calc(92px + var(--safe-b));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:var(--text);color:var(--bg);border-radius:14px;padding:12px 14px 12px 16px;font-weight:650;font-size:15px;display:flex;align-items:center;gap:14px;z-index:60;transition:.2s;width:max-content;max-width:calc(100vw - 32px);box-shadow:var(--shadow)}
+.toast{position:fixed;left:50%;bottom:calc(92px + var(--safe-b));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:var(--text);color:var(--bg);border-radius:var(--r-md);padding:12px 14px 12px 16px;font-weight:650;font-size:15px;display:flex;align-items:center;gap:14px;z-index:60;transition:.2s;width:max-content;max-width:calc(100vw - 32px);box-shadow:var(--shadow)}
 .toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 .toast button{font-weight:800;text-decoration:underline;text-underline-offset:3px}
 </style>
@@ -285,6 +291,9 @@ pre.preview{background:var(--bg);border:1px solid var(--line);border-radius:var(
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
 </svg>
+
+<!-- The filmmaking tools' nav bar, the same as every tool's: renderNav() draws it from api.php's answer. -->
+<nav class="fmnav" id="fmnav"><a class="home" href="../">Filmmaking Team</a></nav>
 
 <!-- HOME -->
 <main id="home" class="app">
@@ -302,7 +311,7 @@ pre.preview{background:var(--bg);border:1px solid var(--line);border-radius:var(
   </section>
   <div class="list-head">
     <h2 id="listH">Sessions</h2>
-    <div class="list-acts"><button class="text-btn" id="newFolder">New folder</button><button class="text-btn" id="selToggle">Select</button></div>
+    <div class="list-acts"><a class="text-btn hidden" id="savedLink" href="saved.php" style="text-decoration:none">Saved</a><button class="text-btn" id="newFolder">New folder</button><button class="text-btn" id="selToggle">Select</button></div>
   </div>
   <div id="sessionList"></div>
   <button class="fab" id="newSession"><svg><use href="#i-plus"/></svg><span>New session</span></button>
@@ -413,6 +422,7 @@ pre.preview{background:var(--bg);border:1px solid var(--line);border-radius:var(
     <h3>Filmmaking account</h3>
     <p class="offline-st" id="acctSt">Checking…</p>
     <a class="btn block hidden" id="acctSignIn" href="#" style="margin-top:10px;text-decoration:none">Sign in</a>
+    <a class="btn block hidden" id="acctSaved" href="saved.php" style="margin-top:10px;text-decoration:none">See your saved sessions</a>
   </section>
   <section>
     <h3>Appearance</h3>
@@ -1329,7 +1339,8 @@ function setClockRate(id){
 // ================= Settings =================
 function applyTheme(){
   document.documentElement.dataset.theme = S.settings.theme;
-  document.querySelector('meta[name="theme-color"]').content = S.settings.theme === 'dark' ? '#14191f' : '#e4e8ec';
+  // brand.css's --gray-5 in each theme, the page's background.
+  document.querySelector('meta[name="theme-color"]').content = S.settings.theme === 'dark' ? '#16171A' : '#F6F6F6';
   $$('#themeSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeSet === S.settings.theme));
 }
 function renderSettings(){
@@ -1877,7 +1888,12 @@ async function acctApi(action, { query = '', body } = {}){
   if(!res.ok || !json || !json.ok){ const err = new Error((json && json.error) || 'http_' + res.status); err.status = res.status; err.body = json; throw err; }
   return json;
 }
-function setAcctState(st){ Acct.state = st; if(openId === 'settings') renderAccount(); }
+function setAcctState(st){
+  Acct.state = st;
+  // Saved sessions is a page on the server, so only worth offering with a connection and an account.
+  $('#savedLink').classList.toggle('hidden', st !== 'in');
+  if(openId === 'settings') renderAccount();
+}
 async function acctCheck(){
   const j = await acctApi('me');
   Acct.user = j.user; Acct.csrf = j.csrf;
@@ -2014,6 +2030,7 @@ function renderAccount(){
     unavailable: 'Saving to an account isn’t available right now. Sessions are safe on this phone.',
   }[Acct.state];
   link.classList.toggle('hidden', !(Acct.state === 'out' && Acct.loginUrl));
+  $('#acctSaved').classList.toggle('hidden', !Acct.meta.owner || Acct.state === 'no-access');
   if(Acct.loginUrl) link.href = Acct.loginUrl;
 }
 window.addEventListener('online', () => acctSync());
@@ -2024,6 +2041,42 @@ document.addEventListener('visibilitychange', () => { if(document.visibilityStat
 setInterval(() => {
   if(document.visibilityState === 'visible' && !['out','no-access'].includes(Acct.state)) acctSync();
 }, 60000);
+
+// ================= Nav bar =================
+// The bar across the top of every filmmaking tool (fm_nav() in auth/page.php, styled by
+// auth/nav.css). Tally is a static page so it can open offline, so it draws the bar itself from
+// api.php?action=nav, the same links in the same order, and keeps the last answer to draw it with
+// when there's no connection.
+const safeHref = u => typeof u === 'string' && (/^\/(?!\/)/.test(u) || /^https?:\/\//i.test(u)) ? u : '';
+function renderNav(n){
+  const el = $('#fmnav'); if(!n || !el) return;
+  const a = (href, text, cls = '') => safeHref(href) ? `<a${cls ? ` class="${cls}"` : ''} href="${esc(href)}">${esc(text)}</a>` : '';
+  let h = a(n.home, 'Filmmaking Team', 'home') || '<a class="home" href="../">Filmmaking Team</a>';
+  for(const t of (Array.isArray(n.tools) ? n.tools : [])) h += a(t.url, t.label, t.current ? 'here' : '');
+  h += '<span class="spacer"></span>';
+  const u = n.user;
+  if(!u){
+    h += a(n.login, 'Sign in');
+  } else {
+    const photo = safeHref(u.photo)
+      ? `<img class="fm-photo" src="${esc(u.photo)}" width="26" height="26" alt="">`
+      : `<span class="fm-photo c${(+u.color || 0) % 8}" aria-hidden="true">${esc(u.initials || '?')}</span>`;
+    h += photo + `<span class="who">${esc(u.name)}</span>` + a(n.account, 'Account') + (u.admin ? a(n.admin, 'Team Admin') : '');
+    if(safeHref(n.logout)) h += `<form method="post" action="${esc(n.logout)}"><input type="hidden" name="csrf" value="${esc(n.csrf || '')}"><button type="submit">Sign out</button></form>`;
+  }
+  el.innerHTML = h;
+}
+async function loadNav(){
+  if(!acctPossible()) return;
+  try{
+    const res = await fetch('api.php?action=nav', { credentials: 'same-origin', cache: 'no-store' });
+    const n = await res.json();
+    if(!res.ok || !n || !n.ok) return;
+    renderNav(n); Store.set('tally:nav', n);
+  }catch(e){}   // offline: the bar drawn from the last answer stays
+}
+window.addEventListener('online', loadNav);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') loadNav(); });
 
 // ================= Boot =================
 (async function boot(){
@@ -2044,6 +2097,7 @@ setInterval(() => {
   const rolling = S.sessions.find(s => s.status === 'rolling');
   if(rolling){ S.currentId = rolling.id; S.folderId = rolling.folderId && folderById(rolling.folderId) ? rolling.folderId : null; show('rec'); keepAwake(true); } else show('home');
   requestAnimationFrame(frameLoop);
+  renderNav(await Store.get('tally:nav')); loadNav();
   acctSync();
 })();
 </script>

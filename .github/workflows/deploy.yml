@@ -17,7 +17,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The Saved sessions page's downloads have to match the app's own files.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: PHP syntax
+        run: for f in *.php; do php -l "$f"; done
+      - name: Exports match the app's
+        run: node tests/export-parity.mjs
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,4 +48,5 @@ jobs:
             **/.git*
             **/.git*/**
             .github/**
+            tests/**
             README.md

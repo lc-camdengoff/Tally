@@ -4,6 +4,7 @@
  * out. The session cookie is the shared sign-in's; writes also need the
  * X-Slate-CSRF header, whose value ?action=me hands out.
  *
+ *   GET  ?action=nav                →  what the shared nav bar shows, signed in or not
  *   GET  ?action=me                 →  {user, csrf}, or 401 {login_url}
  *   GET  ?action=changes&since=N    →  {items, cursor, more}  what changed after N
  *   POST ?action=save   {items}     →  {saved, stale, rejected}
@@ -22,6 +23,32 @@ $action = (string) ($_GET['action'] ?? '');
 $method = (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 $user = fm_current_user();
+
+if ($action === 'nav') {
+    // What the app needs to draw the shared nav bar (fm_nav() in auth/page.php)
+    // itself: the app is a static page, so it can open offline, and keeps the
+    // last answer to draw the bar with then. Signed out too, like the bar.
+    require_once __DIR__ . '/../auth/page.php';
+    $me = null;
+    if ($user !== null) {
+        $name = trim((string) $user['display_name']) ?: (string) $user['username'];
+        $me = ['name' => (string) $user['display_name'], 'photo' => fm_photo_url($user),
+               'initials' => fm_initials($name), 'color' => fm_photo_color_index($user),
+               'admin' => (bool) $user['is_admin']];
+    }
+    tally_reply([
+        'home' => fm_home_url(),
+        'tools' => array_map(static fn(array $t): array => ['label' => $t['label'], 'url' => $t['url'],
+            'current' => $t['current']], fm_tool_links((string) (fm_tool(TALLY_TOOL)['path'] ?? ''), $user)),
+        'user' => $me,
+        'login' => fm_auth_url_with_next('login.php', tally_app_path()),
+        'account' => fm_auth_url('account.php'),
+        'admin' => fm_auth_url('admin.php'),
+        'logout' => fm_auth_url('logout.php'),
+        'csrf' => $user === null ? '' : fm_csrf_token(),
+    ]);
+}
+
 if ($user === null) {
     // The app shows a Sign in link with this. Back to the app afterwards.
     tally_reply(['error' => 'not_signed_in',
