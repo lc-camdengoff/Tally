@@ -61,6 +61,24 @@ and the account catches up when there's a connection.
   changes, and the later change wins. A deletion is saved too, so it reaches
   the other devices. A session someone is logging markers into is never
   deleted from under them; it goes back up instead.
+- **No connection on set is the normal case.** Every change is saved on the
+  phone the moment it's made; nothing waits on the network. What hasn't
+  reached the account yet is worked out from each item's `updated` against the
+  last one saved, not kept in a queue, so there's nothing to lose if the app is
+  closed mid-save. Tally tries again when it opens, when it comes back to the
+  front, when the phone gets a connection, and every minute while it's open.
+  A Home Screen web app can't run in the background on iPhone, so a phone that
+  gets Wi-Fi while Tally is closed backs up the next time it's opened. Any
+  connection will do, mobile data included: it's a few KB, and a web page
+  can't tell Wi-Fi from mobile data on iPhone anyway.
+- Each session in the list says **Backed up** or **On this phone**, and a line
+  above the list says how many are waiting and why: offline, or signed out
+  (sign-ins last 30 days, so a long stretch offline can outlast one), with a
+  Sign in link. Nothing is lost either way; it goes up once signed in.
+- The manifest's `scope` is the tools folder (`../`), not just `tally/`, so on
+  an iPhone the sign-in pages open inside the Home Screen app. Outside its
+  scope iOS would show them in a separate browser view, and the sign-in
+  wouldn't reach the app.
 - Sessions made while signed out are saved to whoever signs in next on that
   phone. Sessions already saved to one account are never sent to another.
 - Access is the `tally` role in filmmaking-home's `auth/tools.php`: someone set

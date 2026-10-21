@@ -135,6 +135,12 @@ h1,h2,h3{margin:0;font-family:var(--font-display);font-weight:900;letter-spacing
 .srow .swatches i{width:14px;height:6px;border-radius:2px}
 .srow .count{font-family:var(--font-tc);font-stretch:80%;font-size:20px;font-weight:500;min-width:2ch;text-align:right}
 .srow .live{color:var(--tally);font-weight:700;font-size:13px}
+/* Whether a session has reached the account yet: updateBackupUI(). */
+.srow .bk{font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.srow .bk.wait{color:var(--warn)}
+.backup-note{margin:0 0 12px;padding:10px 14px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:14px;display:flex;align-items:center;gap:10px}
+.backup-note::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--warn)}
+.backup-note a{color:var(--text);font-weight:700;margin-left:auto;white-space:nowrap}
 .empty{background:var(--panel);border:1px dashed var(--line);border-radius:var(--r-lg);padding:28px 20px;color:var(--muted);text-align:center}
 .empty strong{display:block;color:var(--text);font-size:17px;margin-bottom:4px}
 .fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + var(--safe-b));height:56px;padding:0 26px;border-radius:var(--radius-pill);background:var(--accent);color:var(--on-accent);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);z-index:20}
@@ -313,6 +319,7 @@ pre.preview{background:var(--bg);border:1px solid var(--line);border-radius:var(
     <h2 id="listH">Sessions</h2>
     <div class="list-acts"><a class="text-btn hidden" id="savedLink" href="saved.php" style="text-decoration:none">Saved</a><button class="text-btn" id="newFolder">New folder</button><button class="text-btn" id="selToggle">Select</button></div>
   </div>
+  <p class="backup-note hidden" id="backupNote" role="status"></p>
   <div id="sessionList"></div>
   <button class="fab" id="newSession"><svg><use href="#i-plus"/></svg><span>New session</span></button>
   <div class="selbar hidden" id="selBar">
@@ -812,7 +819,7 @@ function renderHome(){
       ${S.selectMode ? '<span class="check"></span>' : ''}
       <span class="main">
         <span class="name">${esc(s.name)}</span>
-        <span class="sub"><span>${sessionWhen(s)}</span>${s.rateId?`<span>${rateById(s.rateId).label}</span>`:''}${s.status==='rolling'?'<span class="live">Live</span>':''}</span>
+        <span class="sub"><span>${sessionWhen(s)}</span>${s.rateId?`<span>${rateById(s.rateId).label}</span>`:''}${s.status==='rolling'?'<span class="live">Live</span>':''}<span class="bk" data-bk="${s.id}"></span></span>
         ${s.rolls.length?`<span class="sub"><span>${sessionRange(s)}</span></span>`:''}
         ${sw?`<span class="swatches">${sw}</span>`:''}
       </span>
@@ -823,10 +830,12 @@ function renderHome(){
     list.innerHTML = f
       ? `<div class="empty"><strong>No sessions in this folder yet</strong>Tap New session here to start one, or swipe a session left on the main list and choose Move.</div>`
       : `<div class="empty"><strong>No sessions yet</strong>Sync to the camera, then start a named session and tap a button to log each moment. Use New folder to group shoot days for a project.</div>`;
+    updateBackupUI();
     return;
   }
   list.innerHTML = (folderRows.length ? `<div class="sessions folders">${folderRows.join('')}</div>` : '')
     + (sessionRows.length ? `${folderRows.length ? '<h3 class="sub-head">Not in a folder</h3>' : ''}<div class="sessions">${sessionRows.join('')}</div>` : '');
+  updateBackupUI();
 }
 $('#sessionList').addEventListener('click', e => {
   if(swipeRow.justSwiped){ swipeRow.justSwiped = false; return; }
@@ -1837,7 +1846,7 @@ function acctNote(kind){
       Acct.meta.tombs[k] = { at: now, o: Acct.seen[k].o }; delete Acct.seen[k]; changed = true;
     }
   }
-  if(changed){ saveAcctMeta(); acctSoon(); }
+  if(changed){ saveAcctMeta(); acctSoon(); updateBackupUI(); }
 }
 function acctPrime(){
   for(const [kind, list] of Object.entries(ACCT_KINDS))
@@ -1893,6 +1902,7 @@ function setAcctState(st){
   // Saved sessions is a page on the server, so only worth offering with a connection and an account.
   $('#savedLink').classList.toggle('hidden', st !== 'in');
   if(openId === 'settings') renderAccount();
+  updateBackupUI();
 }
 async function acctCheck(){
   const j = await acctApi('me');
@@ -1960,6 +1970,33 @@ function acctPending(){
   }
   return items;
 }
+// What the person can see of the backup: a mark on each session in the list, and one line over
+// it when something is waiting. Only for someone who has signed in on this phone; before that
+// everything is on the phone and Settings says how to back it up.
+function acctBackedUp(kind, it){
+  return !!Acct.meta.owner && (!it.owner || it.owner === Acct.meta.owner)
+    && Acct.meta.pushed[acctKey(kind, it.id)] === it.updated;
+}
+function updateBackupUI(){
+  const note = $('#backupNote'); if(!note) return;
+  const me = Acct.meta.owner;
+  for(const el of $$('[data-bk]')){
+    const s = S.sessions.find(x => x.id === el.dataset.bk);
+    const mine = me && s && (!s.owner || s.owner === me);
+    const done = mine && acctBackedUp('session', s);
+    el.textContent = !mine ? '' : done ? 'Backed up' : 'On this phone';
+    el.classList.toggle('wait', !!mine && !done);
+  }
+  const waiting = me ? S.sessions.filter(s => (!s.owner || s.owner === me) && !acctBackedUp('session', s)).length : 0;
+  const n = `${waiting} session${waiting === 1 ? '' : 's'}`;
+  let html = '';
+  if(waiting && Acct.state === 'offline') html = esc(`${n} saved on this phone. ${waiting === 1 ? 'It backs' : 'They back'} up to your account when you’re online.`);
+  else if(waiting && Acct.state === 'out') html = esc(`${n} saved on this phone only. Sign in to back ${waiting === 1 ? 'it' : 'them'} up.`)
+    + (safeHref(Acct.loginUrl) ? ` <a href="${esc(Acct.loginUrl)}">Sign in</a>` : '');
+  else if(waiting && Acct.state === 'unavailable') html = esc(`${n} saved on this phone. Backing up isn’t working right now; Tally keeps trying.`);
+  note.innerHTML = html;
+  note.classList.toggle('hidden', !html || S.view !== 'home');
+}
 async function acctPush(){
   const items = acctPending(); if(!items.length) return;
   // In batches that stay well under api.php's limits.
@@ -1988,6 +2025,7 @@ async function acctPush(){
   }
   Store.set('tally:sessions', S.sessions); Store.set('tally:folders', S.folders);
   if(stale) await acctPull();   // another device got there first; take its version
+  updateBackupUI();
 }
 async function acctSync(){
   if(!acctPossible()){ setAcctState('unavailable'); return; }
@@ -2023,7 +2061,9 @@ function renderAccount(){
     checking: 'Checking your filmmaking account…',
     in: Acct.user ? `Signed in as ${Acct.user.name}. Sessions save to your account and show up on your other devices${
       pending ? `. ${pending} change${pending > 1 ? 's' : ''} waiting to save.` : when ? `. Last saved ${when}.` : '.'}` : 'Signed in.',
-    out: 'Sign in to your filmmaking account to save sessions to it and see them on your other devices. Tally works the same without it.',
+    out: Acct.meta.owner && pending
+      ? `Signed out. ${pending} change${pending > 1 ? 's are' : ' is'} on this phone and will back up to your account when you sign in again.`
+      : 'Sign in to your filmmaking account to save sessions to it and see them on your other devices. Tally works the same without it.',
     'no-access': 'Your filmmaking account isn’t set up to use Tally, so sessions stay on this phone. Ask an admin.',
     offline: Acct.meta.owner ? `Offline. ${pending ? `${pending} change${pending > 1 ? 's' : ''} will save` : 'Changes save'} to your account when there’s a connection.`
       : 'Offline. Sign in to your filmmaking account when there’s a connection to save sessions to it.',
@@ -2034,6 +2074,9 @@ function renderAccount(){
   if(Acct.loginUrl) link.href = Acct.loginUrl;
 }
 window.addEventListener('online', () => acctSync());
+// A Home Screen app brought back from the app switcher can be restored from memory without a
+// visibilitychange, so this catches the return too.
+window.addEventListener('pageshow', e => { if(e.persisted) acctSync(); });
 window.addEventListener('offline', () => { if(Acct.state === 'in') setAcctState('offline'); });
 document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') acctSync(); });
 // Picks up what the person's other devices saved while this one sits open, and retries a save
