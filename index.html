@@ -2091,22 +2091,43 @@ setInterval(() => {
 // api.php?action=nav, the same links in the same order, and keeps the last answer to draw it with
 // when there's no connection.
 const safeHref = u => typeof u === 'string' && (/^\/(?!\/)/.test(u) || /^https?:\/\//i.test(u)) ? u : '';
+// Wide, the tools sit in the bar and the account links in a menu under the person's photo;
+// narrow, both go into one menu behind a single button. The menus are popovers, so they open
+// and close with no script of their own; nav.css decides which a screen shows.
+const NAV_CHEVRON = '<svg class="fm-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>';
+const NAV_BURGER = '<svg class="fm-burger-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14"/></svg>'
+  + '<svg class="fm-close-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg>';
 function renderNav(n){
   const el = $('#fmnav'); if(!n || !el) return;
-  const a = (href, text, cls = '') => safeHref(href) ? `<a${cls ? ` class="${cls}"` : ''} href="${esc(href)}">${esc(text)}</a>` : '';
-  let h = a(n.home, 'Filmmaking Team', 'home') || '<a class="home" href="../">Filmmaking Team</a>';
-  for(const t of (Array.isArray(n.tools) ? n.tools : [])) h += a(t.url, t.label, t.current ? 'here' : '');
-  h += '<span class="spacer"></span>';
+  const a = (href, text, cls = '', extra = '') => safeHref(href) ? `<a${cls ? ` class="${cls}"` : ''} href="${esc(href)}"${extra}>${text}</a>` : '';
+  const tools = Array.isArray(n.tools) ? n.tools : [];
+  const here = t => t.current ? ' aria-current="page"' : '';
   const u = n.user;
-  if(!u){
-    h += a(n.login, 'Sign in');
-  } else {
-    const photo = safeHref(u.photo)
-      ? `<img class="fm-photo" src="${esc(u.photo)}" width="26" height="26" alt="">`
-      : `<span class="fm-photo c${(+u.color || 0) % 8}" aria-hidden="true">${esc(u.initials || '?')}</span>`;
-    h += photo + `<span class="who">${esc(u.name)}</span>` + a(n.account, 'Account') + (u.admin ? a(n.admin, 'Team Admin') : '');
-    if(safeHref(n.logout)) h += `<form method="post" action="${esc(n.logout)}"><input type="hidden" name="csrf" value="${esc(n.csrf || '')}"><button type="submit">Sign out</button></form>`;
+  const photo = (size = '') => !u ? '' : safeHref(u.photo)
+    ? `<img class="fm-photo${size ? ' ' + size : ''}" src="${esc(u.photo)}" width="${size ? 36 : 26}" height="${size ? 36 : 26}" alt="">`
+    : `<span class="fm-photo${size ? ' ' + size : ''} c${(+u.color || 0) % 8}" aria-hidden="true">${esc(u.initials || '?')}</span>`;
+
+  let h = a(n.home, 'Filmmaking Team', 'home') || '<a class="home" href="../">Filmmaking Team</a>';
+  h += '<span class="fm-tools">' + tools.map(t => a(t.url, esc(t.label), t.current ? 'here' : '', here(t))).join('') + '</span>';
+  h += '<span class="spacer"></span>';
+  h += u
+    ? `<button class="fm-me" type="button" popovertarget="fm-account" aria-label="${esc('Account menu for ' + u.name)}">${photo()}${NAV_CHEVRON}</button>`
+    : a(n.login, 'Sign in', 'fm-signin');
+  h += `<button class="fm-burger" type="button" popovertarget="fm-menu" aria-label="Menu">${photo()}${NAV_BURGER}</button>`;
+
+  // The account links, the same in both menus.
+  let account = '';
+  if(u){
+    account = `<div class="fm-who">${photo('md')}<span class="fm-name"><strong>${esc(u.name)}</strong><span>${esc(u.username || '')}</span></span></div>`
+      + a(n.account, 'Account') + (u.admin ? a(n.admin, 'Team Admin') : '');
+    if(safeHref(n.logout)) account += `<form method="post" action="${esc(n.logout)}"><input type="hidden" name="csrf" value="${esc(n.csrf || '')}"><button type="submit">Sign out</button></form>`;
+    h += `<div class="fm-pop fm-account" id="fm-account" popover>${account}</div>`;
   }
+  h += '<div class="fm-pop fm-menu" id="fm-menu" popover><p class="fm-sect">Tools</p>'
+    + tools.map(t => a(t.url, `<span><span class="fm-label">${esc(t.label)}</span>`
+        + (t.blurb ? `<span class="fm-blurb">${esc(t.blurb)}</span>` : '') + '</span>'
+        + (t.current ? '<span class="fm-tag">Here</span>' : ''), 'fm-tool' + (t.current ? ' here' : ''), here(t))).join('')
+    + `<div class="fm-menu-account">${u ? account : a(n.login, 'Sign in')}</div></div>`;
   el.innerHTML = h;
 }
 async function loadNav(){

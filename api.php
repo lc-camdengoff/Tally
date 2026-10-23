@@ -32,14 +32,15 @@ if ($action === 'nav') {
     $me = null;
     if ($user !== null) {
         $name = trim((string) $user['display_name']) ?: (string) $user['username'];
-        $me = ['name' => (string) $user['display_name'], 'photo' => fm_photo_url($user),
+        $me = ['name' => (string) $user['display_name'], 'username' => (string) $user['username'],
+               'photo' => fm_photo_url($user),
                'initials' => fm_initials($name), 'color' => fm_photo_color_index($user),
                'admin' => (bool) $user['is_admin']];
     }
     tally_reply([
         'home' => fm_home_url(),
         'tools' => array_map(static fn(array $t): array => ['label' => $t['label'], 'url' => $t['url'],
-            'current' => $t['current']], fm_tool_links((string) (fm_tool(TALLY_TOOL)['path'] ?? ''), $user)),
+            'blurb' => $t['blurb'], 'current' => $t['current']], fm_tool_links((string) (fm_tool(TALLY_TOOL)['path'] ?? ''), $user)),
         'user' => $me,
         'login' => fm_auth_url_with_next('login.php', tally_app_path()),
         'account' => fm_auth_url('account.php'),
