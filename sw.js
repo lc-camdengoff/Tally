@@ -11,7 +11,7 @@
 // filmmaking-home deploys. So it's served from the copy and refreshed behind
 // it, and the next open has the new look. People's photos in the nav bar too.
 
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = `tally-${VERSION}`;
 
 // index.html's offline check (VENDOR_FILES) looks for exactly these vendor files.
@@ -94,7 +94,8 @@ async function freshBehind(event, req) {
   const cache = await caches.open(CACHE);
   // The whole address: a photo's says whose it is (photo.php?u=…).
   const hit = await cache.match(req);
-  const fresh = fetch(req).then(res => {
+  // 'no-cache': past the browser's own copy, which the server lets it keep for a week.
+  const fresh = fetch(req, { cache: 'no-cache' }).then(res => {
     if (res.ok && res.type === 'basic') cache.put(req, res.clone());
     return res;
   });
