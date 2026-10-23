@@ -39,6 +39,7 @@ if ($action === 'nav') {
     }
     tally_reply([
         'home' => fm_home_url(),
+        'css' => fm_asset_url('nav.css'),
         'tools' => array_map(static fn(array $t): array => ['label' => $t['label'], 'url' => $t['url'],
             'blurb' => $t['blurb'], 'current' => $t['current']], fm_tool_links((string) (fm_tool(TALLY_TOOL)['path'] ?? ''), $user)),
         'user' => $me,

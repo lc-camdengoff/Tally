@@ -16,7 +16,7 @@
      bar's styles. Before Tally's own, which are built on brand.css's variables. sw.js keeps a copy
      of both, and the fonts brand.css loads, so the app looks the same offline. -->
 <link rel="stylesheet" href="../style/brand.css">
-<link rel="stylesheet" href="../auth/nav.css">
+<link rel="stylesheet" href="../auth/nav.css" id="fmnavcss">
 <style>
 :root{
   /* The look is the filmmaking tools' shared one, from ../style/brand.css. These names are Tally's
@@ -2099,6 +2099,11 @@ const NAV_BURGER = '<svg class="fm-burger-icon" width="20" height="20" viewBox="
   + '<svg class="fm-close-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg>';
 function renderNav(n){
   const el = $('#fmnav'); if(!n || !el) return;
+  // The page can't know when filmmaking-home last deployed nav.css, and a browser keeps the
+  // plain address for a week: the bar's markup would then meet the old bar's styles. api.php's
+  // answer names the current one, as fm_asset_url() gives every other page.
+  const css = $('#fmnavcss');
+  if(css && safeHref(n.css) && css.getAttribute('href') !== n.css) css.setAttribute('href', n.css);
   const a = (href, text, cls = '', extra = '') => safeHref(href) ? `<a${cls ? ` class="${cls}"` : ''} href="${esc(href)}"${extra}>${text}</a>` : '';
   const tools = Array.isArray(n.tools) ? n.tools : [];
   const here = t => t.current ? ' aria-current="page"' : '';
