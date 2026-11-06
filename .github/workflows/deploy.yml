@@ -26,6 +26,8 @@ jobs:
         run: for f in *.php; do php -l "$f"; done
       - name: Exports match the app's
         run: node tests/export-parity.mjs
+      - name: The app and the server merge sessions the same way
+        run: node tests/merge.mjs
 
   deploy:
     needs: test

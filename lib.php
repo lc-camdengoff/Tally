@@ -154,9 +154,131 @@ function tally_clean_item($item): ?array
     return [$kind, $id, $updated, false, $json];
 }
 
+// How many marker deletions a session remembers; see tally_merge_session().
+const TALLY_GONE_KEPT = 5000;
+
+/** A marker's last-edit time, in ms; 0 for one saved before markers had one. */
+function tally_marker_u($m): int
+{
+    return is_array($m) && is_int($m['u'] ?? null) ? $m['u'] : 0;
+}
+
 /**
- * Store what the app sent, each only if it's newer than what's here: two
- * devices editing the same session settle on the later change.
+ * Which of two versions of one marker, edited at the same moment, to keep.
+ * Has to pick the same one as mergeSession() in index.html whatever order the
+ * keys came back in from jsonb, or the phone and the server would keep
+ * handing each other their own pick. UTF-8 bytes, compared as hex, sort the
+ * same in both.
+ */
+function tally_marker_tiebreak($m): string
+{
+    if (!is_array($m)) {
+        return '';
+    }
+    $frames = is_int($m['frames'] ?? null) || is_float($m['frames'] ?? null) ? (int) $m['frames'] : 0;
+    $text = '';
+    foreach (['color', 'name', 'note', 'bid'] as $k) {
+        $text .= (is_string($m[$k] ?? null) ? $m[$k] : '') . "\0";
+    }
+    return sprintf('%012d', max(0, $frames)) . bin2hex($text);
+}
+
+/**
+ * One session from two devices, as one: every marker either has, the later
+ * edit of a marker both have, and none that either deleted after its last
+ * edit (`gone`, marker id => when). The rest of the session (name, rolls,
+ * status) is the later version's. Keeping whichever whole session was saved
+ * later lost the markers the other device had added: in a load test, a
+ * second device fixing notes on a live session lost 136 of 138 of them, and
+ * markers logged between its saves vanished.
+ *
+ * @param array $a the newer version, or the stored one on a tie
+ */
+function tally_merge_session(array $a, array $b): array
+{
+    $gone = [];
+    foreach ([$a, $b] as $side) {
+        foreach (is_array($side['gone'] ?? null) ? $side['gone'] : [] as $id => $at) {
+            // json_decode makes an all-digit id an int key.
+            $id = (string) $id;
+            if (tally_valid_id($id) && is_int($at) && $at > ($gone[$id] ?? -1)) {
+                $gone[$id] = $at;
+            }
+        }
+    }
+    if (count($gone) > TALLY_GONE_KEPT) {
+        arsort($gone);
+        $gone = array_slice($gone, 0, TALLY_GONE_KEPT, true);
+    }
+
+    $byId = [];
+    $order = [];
+    foreach ([$a, $b] as $side) {
+        foreach (is_array($side['markers'] ?? null) ? $side['markers'] : [] as $m) {
+            $id = is_array($m) && is_string($m['id'] ?? null) ? $m['id'] : null;
+            if ($id === null) {
+                continue;
+            }
+            if (!isset($byId[$id])) {
+                $byId[$id] = $m;
+                $order[] = $id;
+                continue;
+            }
+            $have = $byId[$id];
+            $hu = tally_marker_u($have);
+            $mu = tally_marker_u($m);
+            if ($mu > $hu || ($mu === $hu && strcmp(tally_marker_tiebreak($m), tally_marker_tiebreak($have)) > 0)) {
+                $byId[$id] = $m;
+            }
+        }
+    }
+    $markers = [];
+    foreach ($order as $id) {
+        if (isset($gone[$id]) && $gone[$id] >= tally_marker_u($byId[$id])) {
+            continue;
+        }
+        $markers[] = $byId[$id];
+    }
+
+    $out = $a;
+    $out['markers'] = $markers;
+    unset($out['gone']);
+    if ($gone !== []) {
+        $out['gone'] = $gone;
+    }
+    return $out;
+}
+
+/**
+ * What a merge can change about a session, in a form that doesn't depend on
+ * marker order or key order, so "did the merge add anything?" has one answer.
+ */
+function tally_markers_sig(array $s): string
+{
+    $markers = [];
+    foreach (is_array($s['markers'] ?? null) ? $s['markers'] : [] as $m) {
+        if (is_array($m) && is_string($m['id'] ?? null)) {
+            $markers[$m['id']] = tally_marker_u($m) . ':' . tally_marker_tiebreak($m);
+        }
+    }
+    ksort($markers, SORT_STRING);
+    $gone = [];
+    foreach (is_array($s['gone'] ?? null) ? $s['gone'] : [] as $id => $at) {
+        if (is_int($at)) {
+            $gone[(string) $id] = $at;
+        }
+    }
+    ksort($gone, SORT_STRING);
+    return json_encode([$markers, $gone]);
+}
+
+/**
+ * Store what the app sent. A session is merged with what's here (see
+ * tally_merge_session()); anything else, and a deletion, is kept only if it's
+ * newer: the later change wins.
+ *
+ * A merge that adds something the sender didn't have is stored one ms later
+ * than either version, so every device, the sender included, pulls it.
  *
  * @return array{saved: list<array>, stale: list<array>, rejected: list<array>}
  */
@@ -172,6 +294,20 @@ function tally_save(int $userId, array $items): array
                      rev = nextval('tally_rev'), saved_at = now()
                WHERE tally_items.updated < EXCLUDED.updated
            RETURNING rev"
+    );
+    $insert = $pdo->prepare(
+        "INSERT INTO tally_items (user_id, kind, id, data, updated, deleted)
+              VALUES (?, ?, ?, CAST(? AS jsonb), ?, false)
+         ON CONFLICT (user_id, kind, id) DO NOTHING
+           RETURNING rev"
+    );
+    $current = $pdo->prepare(
+        'SELECT data, updated, deleted FROM tally_items WHERE user_id = ? AND kind = ? AND id = ? FOR UPDATE'
+    );
+    $write = $pdo->prepare(
+        "UPDATE tally_items SET data = CAST(? AS jsonb), updated = ?, deleted = false,
+                rev = nextval('tally_rev'), saved_at = now()
+          WHERE user_id = ? AND kind = ? AND id = ?"
     );
     $count = $pdo->prepare('SELECT count(*) AS n FROM tally_items WHERE user_id = ?');
     $count->execute([$userId]);
@@ -189,6 +325,20 @@ function tally_save(int $userId, array $items): array
             $out['rejected'][] = $ref + ['reason' => 'full'];
             continue;
         }
+
+        if ($kind === 'session' && !$deleted) {
+            $result = tally_save_session($pdo, $insert, $current, $write, $userId, $id, $updated, $json);
+            if ($result === 'new') {
+                $have++;
+            }
+            if ($result === 'stale') {
+                $out['stale'][] = $ref;
+            } else {
+                $out['saved'][] = $ref + ['updated' => $updated];
+            }
+            continue;
+        }
+
         $upsert->bindValue(1, $userId, PDO::PARAM_INT);
         $upsert->bindValue(2, $kind);
         $upsert->bindValue(3, $id);
@@ -207,6 +357,76 @@ function tally_save(int $userId, array $items): array
         }
     }
     return $out;
+}
+
+/**
+ * One session, merged with what's here under the row's lock, so two devices
+ * saving at the same instant can't each merge with a copy the other is
+ * about to replace.
+ *
+ * @return string 'new', 'saved', 'merged' or 'stale'
+ */
+function tally_save_session(PDO $pdo, PDOStatement $insert, PDOStatement $current, PDOStatement $write,
+    int $userId, string $id, int $updated, string $json): string
+{
+    $pdo->beginTransaction();
+    try {
+        $insert->execute([$userId, 'session', $id, $json, $updated]);
+        if ($insert->fetch() !== false) {
+            $pdo->commit();
+            return 'new';
+        }
+        $current->execute([$userId, 'session', $id]);
+        $row = $current->fetch();
+        $storedDeleted = $row['deleted'] === true || $row['deleted'] === 't';
+        $stored = $storedDeleted ? null : json_decode((string) $row['data'], true);
+        $storedAt = (int) $row['updated'];
+        $incoming = json_decode($json, true);
+
+        if (!is_array($stored)) {
+            // Deleted here: as before, only a later change brings it back.
+            if ($updated <= $storedAt) {
+                $pdo->commit();
+                return 'stale';
+            }
+            $write->execute([$json, $updated, $userId, 'session', $id]);
+            $pdo->commit();
+            return 'saved';
+        }
+
+        $newer = $updated > $storedAt;
+        $merged = $newer ? tally_merge_session($incoming, $stored) : tally_merge_session($stored, $incoming);
+        $sig = tally_markers_sig($merged);
+        if ($newer && $sig === tally_markers_sig($incoming)) {
+            // Nothing here the sender didn't have: store it as it came.
+            $write->execute([$json, $updated, $userId, 'session', $id]);
+            $pdo->commit();
+            return 'saved';
+        }
+        if (!$newer && $sig === tally_markers_sig($stored)) {
+            // Nothing new: the app merges the stored one on its next pull.
+            $pdo->commit();
+            return 'stale';
+        }
+        if (isset($merged['gone'])) {
+            $merged['gone'] = (object) $merged['gone'];   // an object in JSON, whatever its keys
+        }
+        $mergedJson = json_encode($merged, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($mergedJson === false || strlen($mergedJson) > TALLY_MAX_ITEM_BYTES) {
+            // Too big together: the later one wins, as it did before merging.
+            if ($newer) {
+                $write->execute([$json, $updated, $userId, 'session', $id]);
+            }
+            $pdo->commit();
+            return $newer ? 'saved' : 'stale';
+        }
+        $write->execute([$mergedJson, max($updated, $storedAt) + 1, $userId, 'session', $id]);
+        $pdo->commit();
+        return 'merged';
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
 }
 
 function tally_exists(int $userId, string $kind, string $id): bool
@@ -494,7 +714,10 @@ function tally_saved(int $userId): array
     $stmt->execute([$userId]);
     $sessions = [];
     $folders = [];
-    foreach ($stmt->fetchAll() as $row) {
+    // A row at a time, and only as much of each session as the page shows (how many markers, and
+    // their colours in order): someone with a busy year has tens of MB of markers, and decoding
+    // all of it at once ran past PHP's memory limit. The files are built from the full session.
+    while (($row = $stmt->fetch()) !== false) {
         $data = json_decode((string) $row['data'], true);
         if (!is_array($data) || !tally_valid_id((string) ($data['id'] ?? ''))) {
             continue;
@@ -503,6 +726,11 @@ function tally_saved(int $userId): array
             $folders[$data['id']] = ['name' => is_string($data['name'] ?? null) ? $data['name'] : 'Folder',
                                      'created' => (float) ($data['created'] ?? 0)];
         } elseif ($row['kind'] === 'session') {
+            $data['markers'] = array_map(
+                static fn(array $m): array => ['frames' => $m['frames'], 'color' => $m['color']],
+                tally_session_for_export($data)['markers']
+            );
+            unset($data['gone']);
             $data['_saved_at'] = (string) $row['saved_at'];
             $sessions[] = $data;
         }

@@ -1142,14 +1142,14 @@ function addMarker(bi, t){
   if(s.status !== 'rolling'){ toast(isEnded(s) ? 'This session has ended. Start a new session to log more markers.' : 'Start the session first.'); return; }
   if(s.rateId && s.rateId !== S.sync.rateId){ toast(`The clock is at ${clockRate().label} but this session is ${rateById(s.rateId).label}. Re-sync at ${rateById(s.rateId).label}.`); return; }
   const b = activeButtons()[bi]; if(!b) return;
-  const m = { id:uid(), frames: Math.floor(framesAt(t)), name: b.name || 'Marker', color: b.color, bid:b.id, note:'' };
+  const m = { id:uid(), frames: Math.floor(framesAt(t)), name: b.name || 'Marker', color: b.color, bid:b.id, note:'', u: Date.now() };
   s.markers.push(m); saveSessions();
   if(navigator.vibrate) navigator.vibrate(12);
   renderRec();
   const nb = $(`.mk[data-b="${bi}"]`); nb.classList.add('flash'); setTimeout(()=>nb.classList.remove('flash'), 360);
   const idx = sortedMarkers(s).indexOf(m) + 1;
   toast(`${idx}. ${m.name} at ${framesToTC(m.frames, rateById(s.rateId))}`, 'Undo', () => {
-    s.markers = s.markers.filter(x => x.id !== m.id); saveSessions(); renderRec();
+    forgetMarker(s, m); saveSessions(); renderRec();
   });
 }
 
@@ -1160,6 +1160,13 @@ $('#recTitle').onclick = async () => {
   if(v != null && v.trim()){ s.name = v.trim(); saveSessions(); renderRec(); }
 };
 $('#recExport').onclick = $('#exportBig').onclick = () => openExport([S.currentId]);
+
+// A deleted marker is remembered in the session's `gone`, so merging with another device's copy
+// that still has it doesn't bring it back (see mergeSession()).
+function forgetMarker(s, m){
+  s.markers = s.markers.filter(x => x.id !== m.id);
+  s.gone = s.gone || {}; s.gone[m.id] = Math.max(Date.now(), (m.u || 0) + 1);
+}
 
 // ================= Marker editor =================
 let editing = null, editColor = null;
@@ -1178,12 +1185,15 @@ attachTCFormat($('#mkTC'));
 $('#mkSave').onclick = () => {
   const s = cur(), r = rateById(s.rateId), f = parseTC($('#mkTC').value, r);
   if(f == null){ toast(`Timecode isn't valid at ${r.label}.`); return; }
-  Object.assign(editing, { name: $('#mkName').value.trim() || 'Marker', note: $('#mkNote').value.trim(), frames: f, color: editColor });
+  Object.assign(editing, { name: $('#mkName').value.trim() || 'Marker', note: $('#mkNote').value.trim(), frames: f, color: editColor, u: Date.now() });
   saveSessions(); closeSheet(); renderRec();
 };
 $('#mkDelete').onclick = () => {
-  const s = cur(), m = editing; s.markers = s.markers.filter(x => x !== m); saveSessions(); closeSheet(); renderRec();
-  toast('Marker deleted.', 'Undo', () => { s.markers.push(m); saveSessions(); renderRec(); });
+  const s = cur(), m = editing; forgetMarker(s, m); saveSessions(); closeSheet(); renderRec();
+  toast('Marker deleted.', 'Undo', () => {
+    if(s.gone) delete s.gone[m.id];
+    m.u = Date.now(); s.markers.push(m); saveSessions(); renderRec();
+  });
 };
 
 // ================= Sheets / dialogs / toast =================
@@ -1876,7 +1886,56 @@ function cleanSession(d){
       ...(Number.isFinite(r.endEpoch) ? { endEpoch: r.endEpoch } : {}) })),
     markers: d.markers.filter(m => m && okId(m.id) && Number.isFinite(m.frames)).map(m => ({
       id: m.id, frames: Math.floor(m.frames), name: str(m.name, 80) || 'Marker', color: HEX.test(m.color) ? m.color : RESOLVE_COLORS.Blue,
-      bid: str(m.bid, 64), note: str(m.note, 300) })) };
+      bid: str(m.bid, 64), note: str(m.note, 300), ...(Number.isInteger(m.u) ? { u: m.u } : {}) })),
+    ...cleanGone(d.gone) };
+}
+function cleanGone(g){
+  if(!g || typeof g !== 'object' || Array.isArray(g)) return {};
+  const out = {};
+  for(const [id, at] of Object.entries(g)) if(okId(id) && Number.isInteger(at)) out[id] = at;
+  return Object.keys(out).length ? { gone: out } : {};
+}
+
+// One session from two devices, as one: every marker either has, the later edit of a marker both
+// have, and none that either deleted after its last edit. The rest of the session (name, rolls,
+// status) is `a`'s, the newer. Keeping whichever whole session was saved later lost what the other
+// device had added. api.php merges the same way (tally_merge_session() in lib.php); the two must
+// agree, tie-break included, or the phone and the server would keep handing each other their pick.
+const GONE_KEPT = 5000;
+const markerU = m => Number.isInteger(m && m.u) ? m.u : 0;
+const utf8hex = v => Array.from(new TextEncoder().encode(v), b => b.toString(16).padStart(2, '0')).join('');
+function markerTiebreak(m){
+  const f = Number.isFinite(m.frames) ? Math.max(0, Math.trunc(m.frames)) : 0;
+  const text = ['color','name','note','bid'].map(k => (typeof m[k] === 'string' ? m[k] : '') + '\0').join('');
+  return String(f).padStart(12, '0') + utf8hex(text);
+}
+function mergeSession(a, b){
+  let gone = {};
+  for(const side of [a, b])
+    for(const [id, at] of Object.entries(side.gone || {}))
+      if(okId(id) && Number.isInteger(at) && at > (gone[id] ?? -1)) gone[id] = at;
+  const ids = Object.keys(gone);
+  if(ids.length > GONE_KEPT) gone = Object.fromEntries(ids.sort((x, y) => gone[y] - gone[x]).slice(0, GONE_KEPT).map(id => [id, gone[id]]));
+  const byId = new Map();
+  for(const side of [a, b])
+    for(const m of side.markers || []){
+      if(!m || typeof m.id !== 'string') continue;
+      const have = byId.get(m.id);
+      if(!have || markerU(m) > markerU(have)
+        || (markerU(m) === markerU(have) && markerTiebreak(m) > markerTiebreak(have))) byId.set(m.id, m);
+    }
+  const markers = [...byId.values()].filter(m => !(m.id in gone && gone[m.id] >= markerU(m)));
+  const out = { ...a, markers };
+  delete out.gone;
+  if(Object.keys(gone).length) out.gone = gone;
+  return out;
+}
+// What a merge can change, in a form that doesn't depend on order (tally_markers_sig() in lib.php).
+function markersSig(s){
+  const ms = (s.markers || []).filter(m => m && typeof m.id === 'string')
+    .map(m => [m.id, markerU(m) + ':' + markerTiebreak(m)]).sort((x, y) => x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0);
+  const gone = Object.entries(s.gone || {}).filter(([, at]) => Number.isInteger(at)).sort((x, y) => x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0);
+  return JSON.stringify([ms, gone]);
 }
 function cleanFolder(d){
   if(!d || !okId(d.id)) return null;
@@ -1935,9 +1994,20 @@ function acctApply(it){
     if(it.kind === 'session' && S.currentId === it.id) S.currentId = null;
     return true;
   }
-  const data = it.kind === 'session' ? cleanSession(it.data) : cleanFolder(it.data); if(!data) return false;
-  Acct.meta.pushed[k] = it.updated;
+  let data = it.kind === 'session' ? cleanSession(it.data) : cleanFolder(it.data); if(!data) return false;
   data.updated = it.updated; data.owner = Acct.meta.owner;
+  if(it.kind === 'session' && local){
+    // Keep what this phone has that the account's copy doesn't (markers logged since it last
+    // saved); if there is any, it goes back up merged.
+    const merged = mergeSession(data, local);
+    if(markersSig(merged) !== markersSig(data)){
+      merged.updated = it.updated + 1; merged.owner = Acct.meta.owner;
+      arr[i] = merged; Acct.seen[k] = { s: acctSig(merged), o: merged.owner };
+      return true;
+    }
+    data = merged;
+  }
+  Acct.meta.pushed[k] = it.updated;
   if(i >= 0) arr[i] = data; else arr.push(data);
   Acct.seen[k] = { s: acctSig(data), o: data.owner };
   return true;
