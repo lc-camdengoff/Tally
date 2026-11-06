@@ -58,7 +58,15 @@ and the account catches up when there's a connection.
   database, and creates its table, `tally_items` (`schema.sql`), on first use.
   `lib.php` and `schema.sql` are closed to the web by `.htaccess`.
 - Every session and folder carries `updated`, set on the device whenever it
-  changes, and the later change wins. A deletion is saved too, so it reaches
+  changes, and the later change wins, except for a session's markers: two
+  devices' copies of a session are merged, keeping every marker either one
+  added and the later edit of each (`u` on a marker, when it was last
+  changed), and leaving out markers deleted after their last edit (the
+  session's `gone`). The phone merges what it pulls and the server merges
+  what it's sent (`mergeSession()` in `index.html`, `tally_merge_session()`
+  in `lib.php`; `node tests/merge.mjs` checks they agree). Before, a note
+  fixed on the laptop while the phone was still logging was lost at the
+  phone's next save, and so were markers logged between the two. A deletion is saved too, so it reaches
   the other devices. A session someone is logging markers into is never
   deleted from under them; it goes back up instead.
 - **No connection on set is the normal case.** Every change is saved on the
