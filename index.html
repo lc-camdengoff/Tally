@@ -1916,13 +1916,18 @@ function mergeSession(a, b){
       if(okId(id) && Number.isInteger(at) && at > (gone[id] ?? -1)) gone[id] = at;
   const ids = Object.keys(gone);
   if(ids.length > GONE_KEPT) gone = Object.fromEntries(ids.sort((x, y) => gone[y] - gone[x]).slice(0, GONE_KEPT).map(id => [id, gone[id]]));
-  const byId = new Map();
+  // The kept marker's tiebreak is worked out once per id, as in lib.php, not once per copy.
+  const byId = new Map(), keptTie = new Map();
   for(const side of [a, b])
     for(const m of side.markers || []){
       if(!m || typeof m.id !== 'string') continue;
       const have = byId.get(m.id);
-      if(!have || markerU(m) > markerU(have)
-        || (markerU(m) === markerU(have) && markerTiebreak(m) > markerTiebreak(have))) byId.set(m.id, m);
+      if(!have){ byId.set(m.id, m); continue; }
+      if(markerU(m) > markerU(have)){ byId.set(m.id, m); keptTie.delete(m.id); continue; }
+      if(markerU(m) !== markerU(have)) continue;
+      const tie = markerTiebreak(m);
+      if(!keptTie.has(m.id)) keptTie.set(m.id, markerTiebreak(have));
+      if(tie > keptTie.get(m.id)){ byId.set(m.id, m); keptTie.set(m.id, tie); }
     }
   const markers = [...byId.values()].filter(m => !(m.id in gone && gone[m.id] >= markerU(m)));
   const out = { ...a, markers };
