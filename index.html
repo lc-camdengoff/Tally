@@ -1871,6 +1871,7 @@ function acctPrime(){
 // What arrives from the account is checked like anything from outside: it ends up in style
 // attributes and the timecode maths. Names and notes are escaped wherever they're drawn.
 const HEX = /^#[0-9a-f]{6}$/i;
+const isHex = v => typeof v === 'string' && HEX.test(v);   // HEX.test() alone coerces, and can throw
 const num = (v, d = 0) => Number.isFinite(v) ? v : d;
 const str = (v, max = 300) => typeof v === 'string' ? v.slice(0, max) : '';
 const okId = v => typeof v === 'string' && /^[A-Za-z0-9_-]{4,64}$/.test(v);
@@ -1885,7 +1886,7 @@ function cleanSession(d){
       start: r.start, startEpoch: num(r.startEpoch), end: Number.isFinite(r.end) ? r.end : null,
       ...(Number.isFinite(r.endEpoch) ? { endEpoch: r.endEpoch } : {}) })),
     markers: d.markers.filter(m => m && okId(m.id) && Number.isFinite(m.frames)).map(m => ({
-      id: m.id, frames: Math.floor(m.frames), name: str(m.name, 80) || 'Marker', color: HEX.test(m.color) ? m.color : RESOLVE_COLORS.Blue,
+      id: m.id, frames: Math.floor(m.frames), name: str(m.name, 80) || 'Marker', color: isHex(m.color) ? m.color : RESOLVE_COLORS.Blue,
       bid: str(m.bid, 64), note: str(m.note, 300), ...(Number.isInteger(m.u) ? { u: m.u } : {}) })),
     ...cleanGone(d.gone) };
 }
@@ -1947,7 +1948,7 @@ function cleanFolder(d){
   const f = { id: d.id, name: str(d.name, 80) || 'Folder', created: num(d.created, Date.now()) };
   if(Array.isArray(d.buttons) && d.buttons.length)
     f.buttons = d.buttons.slice(0, MAX_BUTTONS).map(b => ({ id: okId(b && b.id) ? b.id : uid(), name: str(b && b.name, 40),
-      color: HEX.test(b && b.color) ? b.color : LOOKS[0].colors[0] }));
+      color: isHex(b && b.color) ? b.color : LOOKS[0].colors[0] }));
   if(LOOKS.some(l => l.id === d.look)) f.look = d.look;
   return f;
 }
@@ -2021,7 +2022,12 @@ async function acctPull(){
   for(let more = true; more; ){
     const j = await acctApi('changes', { query: '&since=' + Acct.meta.cursor });
     let changed = false;
-    for(const it of j.items) changed = acctApply(it) || changed;
+    // One row that can't be applied is skipped, not retried for ever: it would hold the cursor
+    // where it is, and with it every later change and every save from this device.
+    for(const it of j.items){
+      try{ changed = acctApply(it) || changed; }
+      catch(e){ console.warn('Skipped a change from the account that could not be applied', it && it.kind, it && it.id, e); }
+    }
     Acct.meta.cursor = j.cursor; more = j.more; saveAcctMeta();
     if(changed){
       Store.set('tally:sessions', S.sessions); Store.set('tally:folders', S.folders);
@@ -2035,7 +2041,10 @@ function acctPending(){
     for(const it of list()){
       if(it.owner && it.owner !== me) continue;
       if(Acct.meta.pushed[acctKey(kind, it.id)] === it.updated) continue;
-      const { owner, ...data } = it;
+      // Cleaned like anything from outside: the phone's storage may hold what someone else left
+      // there, and the account hands it to every other device. One that can't be cleaned waits.
+      const data = kind === 'session' ? cleanSession(it) : cleanFolder(it);
+      if(!data) continue;
       items.push({ kind, id: it.id, updated: it.updated, data });
     }
   for(const [k, t] of Object.entries(Acct.meta.tombs)){

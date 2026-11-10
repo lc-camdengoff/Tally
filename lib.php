@@ -155,6 +155,16 @@ function tally_clean_item($item): ?array
             $data['gone'] = (object) $data['gone'];   // an object in JSON, whatever its keys
         }
     }
+    // A colour that isn't text once stopped every other device of the account syncing (the
+    // app's check coerced it, and threw). The app re-checks colours; this keeps out the rest.
+    $list = $kind === 'session' ? 'markers' : 'buttons';
+    if (isset($data[$list]) && is_array($data[$list])) {
+        foreach ($data[$list] as $i => $m) {
+            if (is_array($m) && array_key_exists('color', $m) && !is_string($m['color'])) {
+                unset($data[$list][$i]['color']);
+            }
+        }
+    }
     $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if ($json === false || strlen($json) > TALLY_MAX_ITEM_BYTES) {
         return null;
