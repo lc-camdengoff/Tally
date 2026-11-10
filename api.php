@@ -9,6 +9,9 @@
  *   GET  ?action=changes&since=N    →  {items, cursor, more}  what changed after N
  *   POST ?action=save   {items}     →  {saved, stale, rejected}
  *
+ * changes and save take &as=<username>, and answer 409 wrong_account when the
+ * cookie is someone else's.
+ *
  * An item is {kind: 'session'|'folder', id, updated (ms), deleted?, data}.
  */
 
@@ -60,6 +63,15 @@ if (!fm_can_use($user, TALLY_TOOL)) {
     tally_reply(['error' => 'no_access'], 403);
 }
 $userId = (int) $user['id'];
+
+// The app says whose account it means (`as`, the username ?action=me gave it).
+// The cookie is shared by every tab, so a tab left open as one person can be
+// sending another's: answering it would hand it their sessions to keep as the
+// first person's. It checks who is signed in again instead.
+$as = $_GET['as'] ?? null;
+if ($action !== 'me' && is_string($as) && $as !== '' && $as !== (string) $user['username']) {
+    tally_reply(['error' => 'wrong_account'], 409);
+}
 
 if ($action === 'me') {
     tally_reply([

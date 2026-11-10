@@ -1836,6 +1836,10 @@ const Acct = {
 };
 const acctKey = (kind, id) => kind + ':' + id;
 const saveAcctMeta = () => Store.set('tally:account', Acct.meta);
+// Whose account a pull or save is meant for. The cookie is shared by every tab and tool, so a tab
+// left open as one person can be sending someone else's; api.php refuses that (wrong_account) and
+// the tab checks again who is signed in, rather than taking their sessions for the last person's.
+const acctAs = () => '&as=' + encodeURIComponent(Acct.meta.owner || '');
 function acctSig(it){ const { updated, owner, ...rest } = it; return JSON.stringify(rest); }
 // Only a real web address has an api.php beside it (not a file opened from disk or a preview).
 const acctPossible = () => /^https?:$/.test(location.protocol);
@@ -2020,7 +2024,7 @@ function acctApply(it){
 }
 async function acctPull(){
   for(let more = true; more; ){
-    const j = await acctApi('changes', { query: '&since=' + Acct.meta.cursor });
+    const j = await acctApi('changes', { query: '&since=' + Acct.meta.cursor + acctAs() });
     let changed = false;
     // One row that can't be applied is skipped, not retried for ever: it would hold the cursor
     // where it is, and with it every later change and every save from this device.
@@ -2093,7 +2097,7 @@ async function acctPush(){
   if(batch.length) batches.push(batch);
   let stale = false;
   for(const b of batches){
-    const j = await acctApi('save', { body: { items: b } });
+    const j = await acctApi('save', { query: acctAs(), body: { items: b } });
     const done = [...j.saved, ...j.rejected];   // a rejected one won't do better next time
     if(j.rejected.length) console.warn('Not saved to the account', j.rejected);
     for(const ref of done){
@@ -2122,7 +2126,7 @@ async function acctSync(){
     Acct.lastSaved = Date.now(); setAcctState('in');
   }catch(e){
     if(e.status === 401){ Acct.user = null; Acct.loginUrl = (e.body && e.body.login_url) || ''; setAcctState('out'); }
-    else if(e.status === 403 && e.message === 'bad_csrf'){ setAcctState('checking'); acctSoon(1000); }
+    else if((e.status === 403 && e.message === 'bad_csrf') || (e.status === 409 && e.message === 'wrong_account')){ setAcctState('checking'); acctSoon(1000); }
     else if(e.status === 403){ setAcctState('no-access'); }
     else if(!e.status){ setAcctState('offline'); }           // fetch itself failed: no connection
     else { console.warn('Saving to the account failed', e); setAcctState('unavailable'); }

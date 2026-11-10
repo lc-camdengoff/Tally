@@ -138,6 +138,29 @@ const check = (what, ok) => { console.log((ok ? 'ok   ' : 'FAIL ') + what); if (
   check('a local copy that can\'t be merged doesn\'t stop the pull', d.Acct.state === 'in' && !!d.find('good0001'));
 }
 
+// 2. A tab left open as alice while bob signs in elsewhere in the same browser must not take bob's
+//    sessions as alice's, or hand them to alice's account later.
+{
+  const srv = server(), ph = phone();
+  srv.signIn('bob');
+  srv.put('bob', { kind: 'session', id: 'bobSess1', updated: 10, data: { id: 'bobSess1', name: 'Bob', markers: [] } });
+  srv.signIn('alice');
+  const t1 = await tab(ph, srv); await t1.acctSync();
+  srv.signOut(); srv.signIn('bob');
+  srv.put('bob', { kind: 'session', id: 'bobSess2', updated: 20,
+    data: { id: 'bobSess2', name: 'Bob later shoot', markers: [{ id: 'mkb2', frames: 1, name: 'M', color: '#3d7cf2', bid: '', note: 'bob private note 2' }] } });
+  await t1.acctSync();                      // the stale tab comes back to the front
+  await t1.acctSync();
+  const s2 = t1.find('bobSess2');
+  check('the stale tab never labels bob\'s session as alice\'s', !s2 || s2.owner === 'bob');
+  check('…and notices it is now bob\'s account', t1.Acct.meta.owner === 'bob');
+  const t2 = await tab(ph, srv); await t2.acctSync();
+  srv.signOut(); srv.signIn('alice');
+  const t3 = await tab(ph, srv); await t3.acctSync();
+  check('alice\'s account never gets bob\'s sessions',
+    !srv.has('alice', 'session', 'bobSess2') && !srv.has('alice', 'session', 'bobSess1'));
+}
+
 // 4. api.php stores colours that are colours, or none, so an older app can't trip over them.
 {
   const dir = mkdtempSync(join(tmpdir(), 'tally-acct-'));
