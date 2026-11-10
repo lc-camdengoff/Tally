@@ -30,6 +30,8 @@ jobs:
         run: node tests/merge.mjs
       - name: Merging a session full of repeated marker ids stays cheap
         run: node tests/merge-cost.mjs
+      - name: Saving to the account keeps each person's sessions to their account
+        run: node tests/account.mjs
 
   deploy:
     needs: test
