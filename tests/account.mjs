@@ -161,6 +161,30 @@ const check = (what, ok) => { console.log((ok ? 'ok   ' : 'FAIL ') + what); if (
     !srv.has('alice', 'session', 'bobSess2') && !srv.has('alice', 'session', 'bobSess1'));
 }
 
+// 3. Sessions alice logs while signed in but offline, not yet saved, belong to alice: the next
+//    person to sign in on the phone doesn't get them, and alice's account does when she's back.
+//    Sessions made while nobody was signed in still go to whoever signs in next.
+{
+  const srv = server(), ph = phone();
+  srv.signIn('alice');
+  const t = await tab(ph, srv); await t.acctSync();
+  srv.online = false;
+  await t.newSession('aliceSess1', 'alice-only note');
+  await t.acctSync();
+  check('offline, alice\'s session waits on the phone', t.Acct.state === 'offline' && !!t.find('aliceSess1'));
+  srv.online = true; srv.signOut();
+  await t.acctSync();
+  await t.newSession('nobodys1');            // made while signed out
+  srv.signIn('bob');
+  await t.acctSync();
+  check('bob\'s account doesn\'t get alice\'s unsaved session', !srv.has('bob', 'session', 'aliceSess1'));
+  check('…the phone still has it, still alice\'s', t.find('aliceSess1')?.owner === 'alice');
+  check('…and a session made while signed out still goes to bob', srv.has('bob', 'session', 'nobodys1'));
+  srv.signOut(); srv.signIn('alice');
+  const t2 = await tab(ph, srv); await t2.acctSync();
+  check('alice\'s account gets it when she signs in again', srv.has('alice', 'session', 'aliceSess1'));
+}
+
 // 4. api.php stores colours that are colours, or none, so an older app can't trip over them.
 {
   const dir = mkdtempSync(join(tmpdir(), 'tally-acct-'));

@@ -1847,17 +1847,23 @@ const acctPossible = () => /^https?:$/.test(location.protocol);
 // Called by saveSessions()/saveFolders(): stamps whatever changed and remembers what was deleted.
 function acctNote(kind){
   const now = Date.now(), here = new Set(); let changed = false;
+  // A change made while someone is signed in is theirs from that moment, saved yet or not
+  // (offline on set, or signed out before it went up), so the next person to sign in on the
+  // phone doesn't get it. Only what's made while nobody is (or the account can't use Tally, and
+  // so who it is isn't known) is left for whoever signs in next.
+  const by = Acct.meta.owner && !['out','no-access'].includes(Acct.state) ? Acct.meta.owner : null;
   for(const it of ACCT_KINDS[kind]()){
     const k = acctKey(kind, it.id), sig = acctSig(it); here.add(k);
     const was = Acct.seen[k];
     if(!was || was.s !== sig){
       it.updated = Math.max(now, (it.updated || 0) + 1);
+      if(!it.owner && by) it.owner = by;   // acctSig() leaves owner out, so this isn't a change
       Acct.seen[k] = { s: sig, o: it.owner || null }; delete Acct.meta.tombs[k]; changed = true;
     }
   }
   for(const k of Object.keys(Acct.seen)){
     if(k.startsWith(kind + ':') && !here.has(k)){
-      Acct.meta.tombs[k] = { at: now, o: Acct.seen[k].o }; delete Acct.seen[k]; changed = true;
+      Acct.meta.tombs[k] = { at: now, o: Acct.seen[k].o || by }; delete Acct.seen[k]; changed = true;
     }
   }
   if(changed){ saveAcctMeta(); acctSoon(); updateBackupUI(); }
