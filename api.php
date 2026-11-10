@@ -48,6 +48,7 @@ if ($action === 'nav') {
         'user' => $me,
         'login' => fm_auth_url_with_next('login.php', tally_app_path()),
         'account' => fm_auth_url('account.php'),
+        'ticket' => fm_auth_url('ticket.php'),
         'admin' => fm_auth_url('admin.php'),
         'logout' => fm_auth_url('logout.php'),
         'csrf' => $user === null ? '' : fm_csrf_token(),

@@ -2218,7 +2218,7 @@ function renderNav(n){
   let account = '';
   if(u){
     account = `<div class="fm-who">${photo('md')}<span class="fm-name"><strong>${esc(u.name)}</strong><span>${esc(u.username || '')}</span></span></div>`
-      + a(n.account, 'Account') + (u.admin ? a(n.admin, 'Team Admin') : '');
+      + a(n.account, 'Account') + a(n.ticket, 'Submit a ticket') + (u.admin ? a(n.admin, 'Team Admin') : '');
     if(safeHref(n.logout)) account += `<form method="post" action="${esc(n.logout)}"><input type="hidden" name="csrf" value="${esc(n.csrf || '')}"><button type="submit">Sign out</button></form>`;
     h += `<div class="fm-pop fm-account" id="fm-account" popover>${account}</div>`;
   }
