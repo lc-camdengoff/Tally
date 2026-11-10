@@ -1836,6 +1836,10 @@ const Acct = {
 };
 const acctKey = (kind, id) => kind + ':' + id;
 const saveAcctMeta = () => Store.set('tally:account', Acct.meta);
+// Whose account a pull or save is meant for. The cookie is shared by every tab and tool, so a tab
+// left open as one person can be sending someone else's; api.php refuses that (wrong_account) and
+// the tab checks again who is signed in, rather than taking their sessions for the last person's.
+const acctAs = () => '&as=' + encodeURIComponent(Acct.meta.owner || '');
 function acctSig(it){ const { updated, owner, ...rest } = it; return JSON.stringify(rest); }
 // Only a real web address has an api.php beside it (not a file opened from disk or a preview).
 const acctPossible = () => /^https?:$/.test(location.protocol);
@@ -1843,17 +1847,23 @@ const acctPossible = () => /^https?:$/.test(location.protocol);
 // Called by saveSessions()/saveFolders(): stamps whatever changed and remembers what was deleted.
 function acctNote(kind){
   const now = Date.now(), here = new Set(); let changed = false;
+  // A change made while someone is signed in is theirs from that moment, saved yet or not
+  // (offline on set, or signed out before it went up), so the next person to sign in on the
+  // phone doesn't get it. Only what's made while nobody is (or the account can't use Tally, and
+  // so who it is isn't known) is left for whoever signs in next.
+  const by = Acct.meta.owner && !['out','no-access'].includes(Acct.state) ? Acct.meta.owner : null;
   for(const it of ACCT_KINDS[kind]()){
     const k = acctKey(kind, it.id), sig = acctSig(it); here.add(k);
     const was = Acct.seen[k];
     if(!was || was.s !== sig){
       it.updated = Math.max(now, (it.updated || 0) + 1);
+      if(!it.owner && by) it.owner = by;   // acctSig() leaves owner out, so this isn't a change
       Acct.seen[k] = { s: sig, o: it.owner || null }; delete Acct.meta.tombs[k]; changed = true;
     }
   }
   for(const k of Object.keys(Acct.seen)){
     if(k.startsWith(kind + ':') && !here.has(k)){
-      Acct.meta.tombs[k] = { at: now, o: Acct.seen[k].o }; delete Acct.seen[k]; changed = true;
+      Acct.meta.tombs[k] = { at: now, o: Acct.seen[k].o || by }; delete Acct.seen[k]; changed = true;
     }
   }
   if(changed){ saveAcctMeta(); acctSoon(); updateBackupUI(); }
@@ -1871,6 +1881,7 @@ function acctPrime(){
 // What arrives from the account is checked like anything from outside: it ends up in style
 // attributes and the timecode maths. Names and notes are escaped wherever they're drawn.
 const HEX = /^#[0-9a-f]{6}$/i;
+const isHex = v => typeof v === 'string' && HEX.test(v);   // HEX.test() alone coerces, and can throw
 const num = (v, d = 0) => Number.isFinite(v) ? v : d;
 const str = (v, max = 300) => typeof v === 'string' ? v.slice(0, max) : '';
 const okId = v => typeof v === 'string' && /^[A-Za-z0-9_-]{4,64}$/.test(v);
@@ -1885,7 +1896,7 @@ function cleanSession(d){
       start: r.start, startEpoch: num(r.startEpoch), end: Number.isFinite(r.end) ? r.end : null,
       ...(Number.isFinite(r.endEpoch) ? { endEpoch: r.endEpoch } : {}) })),
     markers: d.markers.filter(m => m && okId(m.id) && Number.isFinite(m.frames)).map(m => ({
-      id: m.id, frames: Math.floor(m.frames), name: str(m.name, 80) || 'Marker', color: HEX.test(m.color) ? m.color : RESOLVE_COLORS.Blue,
+      id: m.id, frames: Math.floor(m.frames), name: str(m.name, 80) || 'Marker', color: isHex(m.color) ? m.color : RESOLVE_COLORS.Blue,
       bid: str(m.bid, 64), note: str(m.note, 300), ...(Number.isInteger(m.u) ? { u: m.u } : {}) })),
     ...cleanGone(d.gone) };
 }
@@ -1916,13 +1927,18 @@ function mergeSession(a, b){
       if(okId(id) && Number.isInteger(at) && at > (gone[id] ?? -1)) gone[id] = at;
   const ids = Object.keys(gone);
   if(ids.length > GONE_KEPT) gone = Object.fromEntries(ids.sort((x, y) => gone[y] - gone[x]).slice(0, GONE_KEPT).map(id => [id, gone[id]]));
-  const byId = new Map();
+  // The kept marker's tiebreak is worked out once per id, as in lib.php, not once per copy.
+  const byId = new Map(), keptTie = new Map();
   for(const side of [a, b])
     for(const m of side.markers || []){
       if(!m || typeof m.id !== 'string') continue;
       const have = byId.get(m.id);
-      if(!have || markerU(m) > markerU(have)
-        || (markerU(m) === markerU(have) && markerTiebreak(m) > markerTiebreak(have))) byId.set(m.id, m);
+      if(!have){ byId.set(m.id, m); continue; }
+      if(markerU(m) > markerU(have)){ byId.set(m.id, m); keptTie.delete(m.id); continue; }
+      if(markerU(m) !== markerU(have)) continue;
+      const tie = markerTiebreak(m);
+      if(!keptTie.has(m.id)) keptTie.set(m.id, markerTiebreak(have));
+      if(tie > keptTie.get(m.id)){ byId.set(m.id, m); keptTie.set(m.id, tie); }
     }
   const markers = [...byId.values()].filter(m => !(m.id in gone && gone[m.id] >= markerU(m)));
   const out = { ...a, markers };
@@ -1942,7 +1958,7 @@ function cleanFolder(d){
   const f = { id: d.id, name: str(d.name, 80) || 'Folder', created: num(d.created, Date.now()) };
   if(Array.isArray(d.buttons) && d.buttons.length)
     f.buttons = d.buttons.slice(0, MAX_BUTTONS).map(b => ({ id: okId(b && b.id) ? b.id : uid(), name: str(b && b.name, 40),
-      color: HEX.test(b && b.color) ? b.color : LOOKS[0].colors[0] }));
+      color: isHex(b && b.color) ? b.color : LOOKS[0].colors[0] }));
   if(LOOKS.some(l => l.id === d.look)) f.look = d.look;
   return f;
 }
@@ -2014,9 +2030,14 @@ function acctApply(it){
 }
 async function acctPull(){
   for(let more = true; more; ){
-    const j = await acctApi('changes', { query: '&since=' + Acct.meta.cursor });
+    const j = await acctApi('changes', { query: '&since=' + Acct.meta.cursor + acctAs() });
     let changed = false;
-    for(const it of j.items) changed = acctApply(it) || changed;
+    // One row that can't be applied is skipped, not retried for ever: it would hold the cursor
+    // where it is, and with it every later change and every save from this device.
+    for(const it of j.items){
+      try{ changed = acctApply(it) || changed; }
+      catch(e){ console.warn('Skipped a change from the account that could not be applied', it && it.kind, it && it.id, e); }
+    }
     Acct.meta.cursor = j.cursor; more = j.more; saveAcctMeta();
     if(changed){
       Store.set('tally:sessions', S.sessions); Store.set('tally:folders', S.folders);
@@ -2030,7 +2051,10 @@ function acctPending(){
     for(const it of list()){
       if(it.owner && it.owner !== me) continue;
       if(Acct.meta.pushed[acctKey(kind, it.id)] === it.updated) continue;
-      const { owner, ...data } = it;
+      // Cleaned like anything from outside: the phone's storage may hold what someone else left
+      // there, and the account hands it to every other device. One that can't be cleaned waits.
+      const data = kind === 'session' ? cleanSession(it) : cleanFolder(it);
+      if(!data) continue;
       items.push({ kind, id: it.id, updated: it.updated, data });
     }
   for(const [k, t] of Object.entries(Acct.meta.tombs)){
@@ -2079,7 +2103,7 @@ async function acctPush(){
   if(batch.length) batches.push(batch);
   let stale = false;
   for(const b of batches){
-    const j = await acctApi('save', { body: { items: b } });
+    const j = await acctApi('save', { query: acctAs(), body: { items: b } });
     const done = [...j.saved, ...j.rejected];   // a rejected one won't do better next time
     if(j.rejected.length) console.warn('Not saved to the account', j.rejected);
     for(const ref of done){
@@ -2108,7 +2132,7 @@ async function acctSync(){
     Acct.lastSaved = Date.now(); setAcctState('in');
   }catch(e){
     if(e.status === 401){ Acct.user = null; Acct.loginUrl = (e.body && e.body.login_url) || ''; setAcctState('out'); }
-    else if(e.status === 403 && e.message === 'bad_csrf'){ setAcctState('checking'); acctSoon(1000); }
+    else if((e.status === 403 && e.message === 'bad_csrf') || (e.status === 409 && e.message === 'wrong_account')){ setAcctState('checking'); acctSoon(1000); }
     else if(e.status === 403){ setAcctState('no-access'); }
     else if(!e.status){ setAcctState('offline'); }           // fetch itself failed: no connection
     else { console.warn('Saving to the account failed', e); setAcctState('unavailable'); }

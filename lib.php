@@ -147,6 +147,24 @@ function tally_clean_item($item): ?array
     if ($kind === 'session' && (!isset($data['markers']) || !is_array($data['markers']))) {
         return null;
     }
+    if ($kind === 'session') {
+        // One marker per id, by the merge's own rule, so a stored session can't carry the
+        // repeated ids that made merging it expensive. The app never sends any.
+        $data = tally_merge_session($data, ['markers' => []]);
+        if (isset($data['gone'])) {
+            $data['gone'] = (object) $data['gone'];   // an object in JSON, whatever its keys
+        }
+    }
+    // A colour that isn't text once stopped every other device of the account syncing (the
+    // app's check coerced it, and threw). The app re-checks colours; this keeps out the rest.
+    $list = $kind === 'session' ? 'markers' : 'buttons';
+    if (isset($data[$list]) && is_array($data[$list])) {
+        foreach ($data[$list] as $i => $m) {
+            if (is_array($m) && array_key_exists('color', $m) && !is_string($m['color'])) {
+                unset($data[$list][$i]['color']);
+            }
+        }
+    }
     $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if ($json === false || strlen($json) > TALLY_MAX_ITEM_BYTES) {
         return null;
@@ -213,6 +231,10 @@ function tally_merge_session(array $a, array $b): array
 
     $byId = [];
     $order = [];
+    // The kept marker's tiebreak, worked out once per id. Recomputing it for every later copy
+    // of the same id made a save full of one large marker repeated thousands of times cost
+    // its size times the copies: 1.4 MB took 17.6 s of CPU.
+    $keptTie = [];
     foreach ([$a, $b] as $side) {
         foreach (is_array($side['markers'] ?? null) ? $side['markers'] : [] as $m) {
             $id = is_array($m) && is_string($m['id'] ?? null) ? $m['id'] : null;
@@ -224,11 +246,18 @@ function tally_merge_session(array $a, array $b): array
                 $order[] = $id;
                 continue;
             }
-            $have = $byId[$id];
-            $hu = tally_marker_u($have);
+            $hu = tally_marker_u($byId[$id]);
             $mu = tally_marker_u($m);
-            if ($mu > $hu || ($mu === $hu && strcmp(tally_marker_tiebreak($m), tally_marker_tiebreak($have)) > 0)) {
+            if ($mu > $hu) {
                 $byId[$id] = $m;
+                unset($keptTie[$id]);
+            } elseif ($mu === $hu) {
+                $tie = tally_marker_tiebreak($m);
+                $keptTie[$id] ??= tally_marker_tiebreak($byId[$id]);
+                if (strcmp($tie, $keptTie[$id]) > 0) {
+                    $byId[$id] = $m;
+                    $keptTie[$id] = $tie;
+                }
             }
         }
     }

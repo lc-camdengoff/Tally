@@ -88,7 +88,10 @@ and the account catches up when there's a connection.
   scope iOS would show them in a separate browser view, and the sign-in
   wouldn't reach the app.
 - Sessions made while signed out are saved to whoever signs in next on that
-  phone. Sessions already saved to one account are never sent to another.
+  phone. Sessions already saved to one account are never sent to another, and
+  nor are ones made while someone was signed in but not saved yet (offline,
+  say): they stay on the phone, marked as theirs, until that person signs in
+  there again.
 - Access is the `tally` role in filmmaking-home's `auth/tools.php`: someone set
   to No access on Team admin can still use the app, but it doesn't save to their
   account.
